@@ -8,6 +8,8 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@v4
 
@@ -15,8 +17,8 @@ jobs:
         with:
           go-version-file: .go-version
 
+      - run: go mod download
+
       - uses: golangci/golangci-lint-action@v6
         with:
           args: ./...
-        env:
-          GOTOOLCHAIN: local
