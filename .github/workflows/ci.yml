@@ -16,5 +16,7 @@ jobs:
           go-version-file: .go-version
 
       - uses: golangci/golangci-lint-action@v6
+        with:
+          args: ./...
         env:
           GOTOOLCHAIN: local
