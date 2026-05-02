@@ -1,113 +1,138 @@
 # memdroid
 
-A memory modification tool for Android processes, operated from your PC via ADB.
-Supports both an interactive CLI and a browser-based Web UI running simultaneously.
+<div align="center">
+
+**ADB-based Android memory modification toolkit — single binary with CLI + Web UI**
+
+[![CI](https://github.com/ykus4/memdroid/actions/workflows/ci.yml/badge.svg)](https://github.com/ykus4/memdroid/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ykus4/memdroid)](https://github.com/ykus4/memdroid/releases/latest)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)](https://go.dev)
+[![License](https://img.shields.io/github/license/ykus4/memdroid)](LICENSE)
+
+<!-- TODO: add demo GIF here -->
+
+</div>
+
+---
+
+## What is memdroid?
+
+memdroid lets you inspect and modify memory of Android processes directly from your PC — no PC root required. Connect via USB or Wi-Fi ADB, attach to any process, and start searching for values in seconds.
+
+- **CLI + Web UI** run simultaneously — use whichever you prefer
+- **No PC root** — all privileged operations run on the device via `adb shell su`
+- **Single binary** — download, run, done
+
+---
+
+## Install
+
+### Download (recommended)
+
+Grab the latest binary for your platform from the [Releases](https://github.com/ykus4/memdroid/releases/latest) page:
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `memdroid-darwin-arm64` |
+| macOS (Intel) | `memdroid-darwin-amd64` |
+| Linux x86_64 | `memdroid-linux-amd64` |
+| Linux ARM64 | `memdroid-linux-arm64` |
+| Windows x86_64 | `memdroid-windows-amd64.exe` |
+
+### Build from source
+
+```bash
+git clone https://github.com/ykus4/memdroid.git
+cd memdroid
+go build -o memdroid .
+```
+
+---
 
 ## Requirements
 
-- Go 1.22+
-- `adb` in PATH (`brew install android-platform-tools` on macOS)
-- Android device with root (e.g. Magisk) and USB debugging enabled
+- `adb` in PATH
+  - macOS: `brew install android-platform-tools`
+  - Linux: `sudo apt install adb`
+- Android device with **root** (e.g. Magisk) and **USB debugging** enabled
 
-## Build
-
-```bash
-go build -o memdroid .
-./memdroid
-```
-
-No root on the host PC is required — all privileged operations run on the device via `adb shell su`.
+---
 
 ## Quick Start
 
+```
 1. Connect your Android device via USB (or Wi-Fi ADB)
-2. Run `./memdroid` — it auto-selects if only one device is connected
-3. Open `http://localhost:8080` in your browser **or** use the CLI menu
-4. Search for a value, narrow it down, modify or freeze it
+2. Run ./memdroid
+3. Open http://localhost:8080 in your browser  ← Web UI
+   or use the interactive CLI menu             ← CLI
+```
 
-**Typical workflow:**
+### Typical workflow — modify a game value (e.g. HP)
 
-1. `1s` — Attach by process name (partial match)
-2. `7` — Search for a value (e.g. HP = 100)
-3. Take damage in-game, then `11` Filter: Decreased
-4. Repeat until 1-5 candidates remain
-5. `15` Modify / `17` Freeze
-6. `pt` Pointer Scan to find a stable address for next session
-7. `28` Save State
+```
+1s  Attach to process  →  search "com.example.game"
+ 7  Search value       →  enter current HP (e.g. 100)
+    Take damage in-game...
+11  Filter: Decreased  →  narrow candidates
+    Repeat until 1–5 remain
+15  Modify             →  set HP to 9999
+17  Freeze             →  lock it there
+pt  Pointer Scan       →  find stable address for next session
+28  Save State         →  persist bookmarks + candidates
+```
+
+---
 
 ## Features
 
-| Category       | Feature                                                                   |
-|----------------|---------------------------------------------------------------------------|
-| Device         | USB device selection, Wi-Fi ADB connect/disconnect                        |
-| Process        | List, Search by name, Attach, Detach, Stop, Continue                      |
-| Search         | Exact value (int32/64/uint32/64/float32/64/bytes), region-filtered        |
-| Pattern/String | Byte pattern with `??` wildcard, UTF-8 / UTF-16LE string search           |
-| Filter         | Changed / Unchanged / Increased / Decreased / Specific value              |
-| Pointer Scan   | Find stable pointer chains (base+offset path) to a target address         |
-| Memory         | Modify (with Undo), Freeze, Freeze All, Unfreeze, Dump, Region browser    |
-| Watch          | Real-time value change monitoring; events pushed to Web UI via WebSocket  |
-| Bookmarks      | Save named addresses, bulk modify                                          |
-| Session        | Save / Load state (bookmarks + candidates) as JSON                        |
-| Web UI         | Full feature parity with CLI, accessible at `:8080`                       |
+| Category | Feature |
+|----------|---------|
+| **Device** | USB device selection, Wi-Fi ADB connect/disconnect |
+| **Process** | List, search by name, attach, detach, stop, continue |
+| **Search** | Exact value — `int32/64` `uint32/64` `float32/64` `bytes` |
+| **Pattern** | Byte pattern with `??` wildcard (e.g. `FF 00 ?? 01`) |
+| **String** | UTF-8 and UTF-16LE string search & in-place edit |
+| **Filter** | Changed / Unchanged / Increased / Decreased / Exact value |
+| **Pointer Scan** | Find stable pointer chains across process restarts |
+| **Modify** | Write value with Undo, Freeze (100 ms loop), Dump to file |
+| **Watch** | Real-time value change monitor — streamed to Web UI via WebSocket |
+| **Bookmarks** | Named addresses, bulk modify |
+| **Session** | Save / load state (bookmarks + candidates) as JSON |
+| **Web UI** | Full feature parity with CLI at `http://localhost:8080` |
+
+---
 
 ## Architecture
 
-```
-./memdroid
-  ├── CLI (main goroutine)          — interactive menu
-  ├── HTTP server (:8080)           — Web UI + REST API + WebSocket
-  └── app.State (mutex-protected)
-        └── driver.Driver
-              ├── ListProcesses()   — adb shell ps -A
-              ├── Attach/Detach()   — kill -STOP / -CONT via su
-              ├── Peek/Poke()       — /proc/<pid>/mem via dd + base64
-              └── ReadMaps()        — adb shell cat /proc/<pid>/maps
+```mermaid
+graph TD
+    A[memdroid binary] --> B[CLI\nmain goroutine]
+    A --> C[HTTP Server :8080\nREST API + WebSocket]
+    B --> D[app.State\nmutex-protected]
+    C --> D
+    D --> E[driver.Driver]
+    E --> F[adb shell ps -A\nListProcesses]
+    E --> G[kill -STOP / -CONT via su\nAttach / Detach]
+    E --> H[/proc/pid/mem via dd+base64\nPeek / Poke]
+    E --> I[/proc/pid/maps\nReadMaps]
 ```
 
-## Project Structure
-
-```
-memdroid/
-├── main.go
-├── go.mod
-└── internal/
-    ├── app/state.go                 # Thread-safe shared state
-    ├── driver/
-    │   ├── driver.go                # Driver interface + Region types
-    │   └── adb/                     # ADB implementation
-    │       ├── adb.go               # Device selection, Wi-Fi, shell helpers
-    │       ├── process.go           # ps -A, FindByName, attach/detach
-    │       ├── maps.go              # /proc/<pid>/maps parser
-    │       └── mem.go               # Peek/Poke via dd+base64, ReadBytes
-    ├── process/
-    │   ├── list.go                  # ProcessList() via Driver
-    │   └── control.go               # Attach/Detach/Stop/Continue wrappers
-    ├── server/
-    │   ├── server.go                # HTTP routing + WebSocket wire-up
-    │   ├── handlers.go              # REST API handlers
-    │   ├── wswatch/wswatch.go       # WebSocket broadcast hub
-    │   └── static/index.html        # Single-page Web UI
-    └── memory/
-        ├── pointer/pointer.go       # Pointer chain scan
-        ├── search/                  # Scan & filter (all value types)
-        ├── modify/                  # Write, Undo, Freeze, Dump
-        ├── watch/                   # Background value monitor
-        └── store/                   # Bookmarks, Save/Load JSON
-```
+---
 
 ## Documentation
 
 | Doc | Contents |
 |-----|----------|
-| [docs/usage.md](docs/usage.md) | Full CLI menu, workflows, value types, Wi-Fi ADB |
+| [docs/usage.md](docs/usage.md) | Full CLI menu reference, workflows, value types, Wi-Fi ADB |
 | [docs/api.md](docs/api.md) | REST + WebSocket API reference |
 | [docs/architecture.md](docs/architecture.md) | Package structure, design decisions, algorithms |
 | [docs/development.md](docs/development.md) | Setup, pre-commit hooks, contribution guide |
 
+---
+
 ## Notes
 
-- Requires root on the Android device (`su` must be available in `adb shell`)
-- Pointer scan reads all rw memory; may take 30-60 s on large processes
-- Value search reads each memory region in one `adb shell` call (~50 round-trips total) and scans in-memory on the PC — full scans typically complete in seconds
-- Memory reads use `dd if=/proc/<pid>/mem` piped through base64 to survive ADB text transport
+- Requires **root on the Android device** (`su` must be available in `adb shell`)
+- Pointer scan reads all `rw` memory regions — may take 30–60 s on large processes
+- Memory reads use `dd if=/proc/<pid>/mem` piped through `base64` to survive ADB text transport
+- Full scans typically complete in seconds — each region is read in a single `adb shell` call
