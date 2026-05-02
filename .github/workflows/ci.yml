@@ -15,4 +15,6 @@ jobs:
         with:
           go-version-file: .go-version
 
+      - run: go mod tidy
+
       - uses: golangci/golangci-lint-action@v6
