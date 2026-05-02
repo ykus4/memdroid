@@ -1,18 +1,23 @@
 version: "2"
 
-linters:
+formatters:
   enable:
     - gofmt
     - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - memodroid
+
+linters:
+  enable:
     - govet
     - errcheck
     - staticcheck
-  settings:
-    goimports:
-      local-prefixes: memodroid
 
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
