@@ -19,7 +19,7 @@ func DumpRegion(drv driver.Driver, pid int, addr uintptr, size int, path string)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	for offset := 0; offset < size; offset += dumpWordSize {
 		remaining := size - offset
@@ -29,29 +29,29 @@ func DumpRegion(drv driver.Driver, pid int, addr uintptr, size int, path string)
 
 		data, err := drv.Peek(pid, addr+uintptr(offset), remaining)
 		if err != nil {
-			fmt.Fprintf(f, "%016x  !! read error: %v\n", addr+uintptr(offset), err)
+			_, _ = fmt.Fprintf(f, "%016x  !! read error: %v\n", addr+uintptr(offset), err)
 			continue
 		}
 
-		fmt.Fprintf(f, "%016x  ", addr+uintptr(offset))
+		_, _ = fmt.Fprintf(f, "%016x  ", addr+uintptr(offset))
 		for i, b := range data {
-			fmt.Fprintf(f, "%02x ", b)
+			_, _ = fmt.Fprintf(f, "%02x ", b)
 			if i == dumpWordSize/2-1 {
-				fmt.Fprintf(f, " ")
+				_, _ = fmt.Fprintf(f, " ")
 			}
 		}
 		for i := len(data); i < dumpWordSize; i++ {
-			fmt.Fprintf(f, "   ")
+			_, _ = fmt.Fprintf(f, "   ")
 		}
-		fmt.Fprintf(f, " |")
+		_, _ = fmt.Fprintf(f, " |")
 		for _, b := range data {
 			if b >= dumpASCIIMin && b <= dumpASCIIMax {
-				fmt.Fprintf(f, "%c", b)
+				_, _ = fmt.Fprintf(f, "%c", b)
 			} else {
-				fmt.Fprintf(f, ".")
+				_, _ = fmt.Fprintf(f, ".")
 			}
 		}
-		fmt.Fprintf(f, "|\n")
+		_, _ = fmt.Fprintf(f, "|\n")
 	}
 
 	fmt.Printf("Dumped %d bytes from 0x%x to %s\n", size, addr, path)
