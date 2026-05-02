@@ -19,26 +19,31 @@ type freezeEntry struct {
 	stop  chan struct{}
 }
 
-var (
-	freezeMu      sync.Mutex
-	frozenEntries = map[uintptr]*freezeEntry{}
-)
+// Freezer manages a set of frozen addresses.
+type Freezer struct {
+	mu      sync.Mutex
+	entries map[uintptr]*freezeEntry
+}
+
+func NewFreezer() *Freezer {
+	return &Freezer{entries: make(map[uintptr]*freezeEntry)}
+}
 
 // Freeze starts a goroutine that repeatedly writes value to addr every 100ms.
-func Freeze(drv driver.Driver, pid int, addr uintptr, value []byte) {
-	freezeMu.Lock()
-	defer freezeMu.Unlock()
+// Returns an error if addr is already frozen.
+func (f *Freezer) Freeze(drv driver.Driver, pid int, addr uintptr, value []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	if _, exists := frozenEntries[addr]; exists {
-		fmt.Printf("0x%x is already frozen\n", addr)
-		return
+	if _, exists := f.entries[addr]; exists {
+		return fmt.Errorf("0x%x is already frozen", addr)
 	}
 
 	val := make([]byte, len(value))
 	copy(val, value)
 
 	e := &freezeEntry{drv: drv, pid: pid, addr: addr, value: val, stop: make(chan struct{})}
-	frozenEntries[addr] = e
+	f.entries[addr] = e
 
 	go func() {
 		ticker := time.NewTicker(freezeInterval)
@@ -53,56 +58,53 @@ func Freeze(drv driver.Driver, pid int, addr uintptr, value []byte) {
 		}
 	}()
 
-	fmt.Printf("Freezing 0x%x\n", addr)
+	return nil
 }
 
 // FreezeAllCandidates freezes every address in the session with its last-seen value.
-func FreezeAllCandidates(drv driver.Driver, s *search.Session) {
-	if !s.HasCandidates() {
-		fmt.Println("No candidates to freeze")
-		return
-	}
+func (f *Freezer) FreezeAllCandidates(drv driver.Driver, s *search.Session) int {
 	count := 0
 	for addr, val := range s.Candidates {
-		Freeze(drv, s.PID, addr, val)
-		count++
+		if f.Freeze(drv, s.PID, addr, val) == nil {
+			count++
+		}
 	}
-	fmt.Printf("Freezing %d addresses\n", count)
+	return count
 }
 
 // Unfreeze stops the freeze goroutine for addr.
-func Unfreeze(addr uintptr) {
-	freezeMu.Lock()
-	defer freezeMu.Unlock()
+// Returns an error if addr was not frozen.
+func (f *Freezer) Unfreeze(addr uintptr) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	e, ok := frozenEntries[addr]
+	e, ok := f.entries[addr]
 	if !ok {
-		fmt.Printf("0x%x is not frozen\n", addr)
-		return
+		return fmt.Errorf("0x%x is not frozen", addr)
 	}
 	close(e.stop)
-	delete(frozenEntries, addr)
-	fmt.Printf("Unfrozen 0x%x\n", addr)
+	delete(f.entries, addr)
+	return nil
 }
 
 // UnfreezeAll stops all freeze goroutines.
-func UnfreezeAll() {
-	freezeMu.Lock()
-	defer freezeMu.Unlock()
+func (f *Freezer) UnfreezeAll() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	for addr, e := range frozenEntries {
+	for addr, e := range f.entries {
 		close(e.stop)
-		delete(frozenEntries, addr)
+		delete(f.entries, addr)
 	}
 }
 
-// FrozenList returns all currently frozen addresses.
-func FrozenList() []uintptr {
-	freezeMu.Lock()
-	defer freezeMu.Unlock()
+// List returns all currently frozen addresses.
+func (f *Freezer) List() []uintptr {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	addrs := make([]uintptr, 0, len(frozenEntries))
-	for addr := range frozenEntries {
+	addrs := make([]uintptr, 0, len(f.entries))
+	for addr := range f.entries {
 		addrs = append(addrs, addr)
 	}
 	return addrs

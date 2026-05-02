@@ -83,8 +83,8 @@ Response: `{"target":"0x...","chains":[{"base":"0x...","label":"libXX.so","offse
 
 | Method | Path | Body | Description |
 |--------|------|------|-------------|
-| POST | `/api/session/save` | `{"path":"memodroid.json"}` | Save bookmarks + candidates |
-| POST | `/api/session/load` | `{"path":"memodroid.json"}` | Load bookmarks + candidates |
+| POST | `/api/session/save` | `{"path":"memdroid.json"}` | Save bookmarks + candidates |
+| POST | `/api/session/load` | `{"path":"memdroid.json"}` | Load bookmarks + candidates |
 
 ## WebSocket
 

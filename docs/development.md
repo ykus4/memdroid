@@ -2,15 +2,15 @@
 
 ## Requirements
 
-- Go 1.22+
-- Linux (build tags require Linux for ptrace; non-Linux builds compile but all ptrace calls return `errNotLinux`)
+- Go 1.26+
+- macOS, Linux, or Windows (host PC)
 - [pre-commit](https://pre-commit.com/) for local hooks
 
 ## Setup
 
 ```bash
-git clone <repo>
-cd MeMoDroid
+git clone https://github.com/ykus4/memdroid.git
+cd memdroid
 go mod download
 
 # Install pre-commit hooks
@@ -21,11 +21,7 @@ pre-commit install
 ## Build
 
 ```bash
-# Standard build
-go build -o memodroid .
-
-# Verify it compiles on non-Linux too (stub paths)
-GOOS=darwin go build ./...
+go build -o memdroid .
 ```
 
 ## Pre-commit Hooks
@@ -46,23 +42,21 @@ pre-commit run --all-files
 ```
 
 Linter config: [.golangci.yml](../.golangci.yml)  
-Enabled: `gofmt`, `goimports`, `govet`, `errcheck`, `staticcheck`, `unused`, `gosimple`
+Enabled: `gofmt`, `goimports`, `govet`, `errcheck`, `staticcheck`
 
 ## Adding a New Feature
 
 1. Decide which package it belongs to:
-   - `internal/memory/ptrace/` — low-level syscall I/O
    - `internal/memory/search/` — scanning and filtering logic
    - `internal/memory/modify/` — write-side operations
    - `internal/memory/watch/` — background monitoring
    - `internal/memory/store/` — persistence (bookmarks, JSON)
    - `internal/process/` — process lifecycle
+   - `internal/driver/adb/` — ADB-level operations
 
-2. If the feature is Linux-only, add a `//go:build linux` tag and a matching `_stub.go` with `//go:build !linux`.
+2. Wire up the new function in `main.go` and add a menu entry to `printMenu`, and register any new REST endpoint in `server.go`.
 
-3. Wire up the new function in `main.go` and add a menu entry to `printMenu`.
-
-4. Update [docs/usage.md](usage.md) and [docs/architecture.md](architecture.md).
+3. Update [docs/usage.md](usage.md) and [docs/architecture.md](architecture.md).
 
 ## Commit Convention
 

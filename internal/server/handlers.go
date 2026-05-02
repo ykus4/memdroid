@@ -8,7 +8,6 @@ import (
 
 	"memodroid/internal/app"
 	"memodroid/internal/driver/adb"
-	"memodroid/internal/memory/modify"
 	"memodroid/internal/memory/pointer"
 	"memodroid/internal/memory/search"
 	"memodroid/internal/memory/store"
@@ -42,6 +41,15 @@ func parseHexAddr(s string) (uintptr, error) {
 	return uintptr(v), err
 }
 
+func requirePID(w http.ResponseWriter, h *handler) (int, bool) {
+	pid := h.state.GetPID()
+	if pid == 0 {
+		writeError(w, 400, "not attached")
+		return 0, false
+	}
+	return pid, true
+}
+
 // --- status ---
 
 func (h *handler) status(w http.ResponseWriter, _ *http.Request) {
@@ -59,8 +67,8 @@ func (h *handler) status(w http.ResponseWriter, _ *http.Request) {
 		"attached":   pid != 0,
 		"value_type": vt.String(),
 		"candidates": candidates,
-		"undo_depth": modify.UndoDepth(),
-		"frozen":     modify.FrozenList(),
+		"undo_depth": h.state.UndoStack.Depth(),
+		"frozen":     h.state.Freezer.List(),
 		"device":     h.adb.DeviceSerial(),
 	})
 }
@@ -100,7 +108,7 @@ func (h *handler) deviceSelect(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) deviceConnectWifi(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Addr string `json:"addr"` // "host:port"
+		Addr string `json:"addr"`
 	}
 	if err := decode(r, &req); err != nil || req.Addr == "" {
 		writeError(w, 400, "addr required (host:port)")
@@ -172,7 +180,7 @@ func (h *handler) processAttach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	drv := h.state.GetDriver()
-	if err := process.Attach(drv, req.PID); err != nil {
+	if err := drv.Attach(req.PID); err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
@@ -182,25 +190,23 @@ func (h *handler) processAttach(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) processDetach(w http.ResponseWriter, _ *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
-	modify.UnfreezeAll()
-	process.Detach(h.state.GetDriver(), pid)
+	h.state.Freezer.UnfreezeAll()
+	h.state.GetDriver().Detach(pid)
 	h.state.SetPID(0)
 	h.state.SetSession(nil)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (h *handler) processStop(w http.ResponseWriter, _ *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
-	if err := process.Stop(h.state.GetDriver(), pid); err != nil {
+	if err := h.state.GetDriver().Stop(pid); err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
@@ -208,24 +214,22 @@ func (h *handler) processStop(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *handler) processContinue(w http.ResponseWriter, _ *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
-	if err := process.Continue(h.state.GetDriver(), pid); err != nil {
+	if err := h.state.GetDriver().Continue(pid); err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
-// --- maps (region browser) ---
+// --- maps ---
 
 func (h *handler) mapsList(w http.ResponseWriter, _ *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	regions, err := h.state.GetDriver().ReadMaps(pid)
@@ -254,11 +258,11 @@ func (h *handler) mapsList(w http.ResponseWriter, _ *http.Request) {
 // --- search ---
 
 func (h *handler) searchValue(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
+	_ = pid
 	var req struct {
 		Value string `json:"value"`
 		Type  string `json:"type"`
@@ -269,7 +273,7 @@ func (h *handler) searchValue(w http.ResponseWriter, r *http.Request) {
 	}
 	vt := h.state.GetValueType()
 	if req.Type != "" {
-		if t, err := parseValueType(req.Type); err == nil {
+		if t, err := search.ParseValueType(req.Type); err == nil {
 			vt = t
 			h.state.SetValueType(vt)
 		}
@@ -280,14 +284,16 @@ func (h *handler) searchValue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := h.state.EnsureSession()
-	sess.Search(val)
+	if err := sess.Search(val); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
 	writeJSON(w, map[string]any{"candidates": sess.CandidateCount()})
 }
 
 func (h *handler) searchPattern(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -302,14 +308,17 @@ func (h *handler) searchPattern(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	search.SearchPattern(h.state.GetDriver(), pid, pat)
-	writeJSON(w, map[string]any{"ok": true})
+	results, err := search.SearchPattern(h.state.GetDriver(), pid, pat)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"count": len(results)})
 }
 
 func (h *handler) searchString(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -321,12 +330,18 @@ func (h *handler) searchString(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	drv := h.state.GetDriver()
+	var results []uintptr
+	var err error
 	if req.Encoding == "utf16" {
-		search.SearchStringUTF16(drv, pid, req.Value)
+		results, err = search.SearchStringUTF16(drv, pid, req.Value)
 	} else {
-		search.SearchStringUTF8(drv, pid, req.Value)
+		results, err = search.SearchStringUTF8(drv, pid, req.Value)
 	}
-	writeJSON(w, map[string]any{"ok": true})
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"count": len(results)})
 }
 
 func (h *handler) searchFilter(w http.ResponseWriter, r *http.Request) {
@@ -343,7 +358,7 @@ func (h *handler) searchFilter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	mode, err := parseFilterMode(req.Mode)
+	mode, err := search.ParseFilterMode(req.Mode)
 	if err != nil {
 		writeError(w, 400, err.Error())
 		return
@@ -356,7 +371,10 @@ func (h *handler) searchFilter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	sess.Filter(mode, target)
+	if err := sess.Filter(mode, target); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	writeJSON(w, map[string]any{"candidates": sess.CandidateCount()})
 }
 
@@ -392,9 +410,8 @@ func (h *handler) searchReset(w http.ResponseWriter, _ *http.Request) {
 // --- pointer scan ---
 
 func (h *handler) pointerScan(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -437,9 +454,8 @@ func (h *handler) pointerScan(w http.ResponseWriter, r *http.Request) {
 // --- memory ---
 
 func (h *handler) memoryModify(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -461,7 +477,7 @@ func (h *handler) memoryModify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, fmt.Sprintf("invalid value: %v", err))
 		return
 	}
-	if err := modify.WithUndo(h.state.GetDriver(), pid, addr, val, vt); err != nil {
+	if err := h.state.UndoStack.WithUndo(h.state.GetDriver(), pid, addr, val, vt); err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
@@ -469,17 +485,16 @@ func (h *handler) memoryModify(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) memoryUndo(w http.ResponseWriter, _ *http.Request) {
-	if err := modify.Undo(); err != nil {
-		writeError(w, 500, err.Error())
+	if err := h.state.UndoStack.Undo(); err != nil {
+		writeError(w, 400, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true, "undo_depth": modify.UndoDepth()})
+	writeJSON(w, map[string]any{"ok": true, "undo_depth": h.state.UndoStack.Depth()})
 }
 
 func (h *handler) memoryFreeze(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -500,7 +515,10 @@ func (h *handler) memoryFreeze(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, fmt.Sprintf("invalid value: %v", err))
 		return
 	}
-	modify.Freeze(h.state.GetDriver(), pid, addr, val)
+	if err := h.state.Freezer.Freeze(h.state.GetDriver(), pid, addr, val); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
@@ -510,8 +528,8 @@ func (h *handler) memoryFreezeAll(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, 400, "no candidates")
 		return
 	}
-	modify.FreezeAllCandidates(h.state.GetDriver(), sess)
-	writeJSON(w, map[string]any{"ok": true})
+	count := h.state.Freezer.FreezeAllCandidates(h.state.GetDriver(), sess)
+	writeJSON(w, map[string]any{"ok": true, "count": count})
 }
 
 func (h *handler) memoryUnfreeze(w http.ResponseWriter, r *http.Request) {
@@ -527,12 +545,15 @@ func (h *handler) memoryUnfreeze(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid addr")
 		return
 	}
-	modify.Unfreeze(addr)
+	if err := h.state.Freezer.Unfreeze(addr); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (h *handler) memoryFrozen(w http.ResponseWriter, _ *http.Request) {
-	addrs := modify.FrozenList()
+	addrs := h.state.Freezer.List()
 	out := make([]string, len(addrs))
 	for i, a := range addrs {
 		out[i] = fmt.Sprintf("0x%x", a)
@@ -546,6 +567,8 @@ func (h *handler) bookmarkList(w http.ResponseWriter, _ *http.Request) {
 	pid := h.state.GetPID()
 	drv := h.state.GetDriver()
 	bl := h.state.GetBookmarks()
+	vals := bl.Values(drv, pid)
+
 	type entry struct {
 		Index int    `json:"index"`
 		Addr  string `json:"addr"`
@@ -555,18 +578,12 @@ func (h *handler) bookmarkList(w http.ResponseWriter, _ *http.Request) {
 	}
 	out := make([]entry, len(bl.Entries))
 	for i, b := range bl.Entries {
-		val := "?"
-		if pid != 0 {
-			if cur, err := drv.Peek(pid, b.Addr, b.VType.Size()); err == nil {
-				val = search.FormatValue(cur, b.VType)
-			}
-		}
 		out[i] = entry{
 			Index: i,
 			Addr:  fmt.Sprintf("0x%x", b.Addr),
 			Label: b.Label,
 			Type:  b.VType.String(),
-			Value: val,
+			Value: vals[b.Addr],
 		}
 	}
 	writeJSON(w, out)
@@ -598,14 +615,16 @@ func (h *handler) bookmarkRemove(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	h.state.GetBookmarks().Remove(req.Index)
+	if err := h.state.GetBookmarks().Remove(req.Index); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (h *handler) bookmarkModifyAll(w http.ResponseWriter, r *http.Request) {
-	pid := h.state.GetPID()
-	if pid == 0 {
-		writeError(w, 400, "not attached")
+	pid, ok := requirePID(w, h)
+	if !ok {
 		return
 	}
 	var req struct {
@@ -621,8 +640,8 @@ func (h *handler) bookmarkModifyAll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, fmt.Sprintf("invalid value: %v", err))
 		return
 	}
-	h.state.GetBookmarks().ModifyAll(h.state.GetDriver(), pid, val, vt)
-	writeJSON(w, map[string]any{"ok": true})
+	count := h.state.GetBookmarks().ModifyAll(h.state.GetDriver(), pid, val, vt)
+	writeJSON(w, map[string]any{"ok": true, "count": count})
 }
 
 // --- session ---
@@ -632,7 +651,7 @@ func (h *handler) sessionSave(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 	}
 	if err := decode(r, &req); err != nil || req.Path == "" {
-		req.Path = "memodroid.json"
+		req.Path = "memdroid.json"
 	}
 	if err := store.SaveState(req.Path, h.state.GetBookmarks(), h.state.GetSession()); err != nil {
 		writeError(w, 500, err.Error())
@@ -646,7 +665,7 @@ func (h *handler) sessionLoad(w http.ResponseWriter, r *http.Request) {
 		Path string `json:"path"`
 	}
 	if err := decode(r, &req); err != nil || req.Path == "" {
-		req.Path = "memodroid.json"
+		req.Path = "memdroid.json"
 	}
 	sess := h.state.GetSession()
 	bl := h.state.GetBookmarks()
@@ -654,44 +673,9 @@ func (h *handler) sessionLoad(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	if sess != nil {
+		sess.Driver = h.state.GetDriver()
+	}
 	h.state.SetSession(sess)
 	writeJSON(w, map[string]any{"ok": true, "path": req.Path})
-}
-
-// --- parse helpers ---
-
-func parseValueType(s string) (search.ValueType, error) {
-	switch s {
-	case "int32":
-		return search.TypeInt32, nil
-	case "int64":
-		return search.TypeInt64, nil
-	case "float32":
-		return search.TypeFloat32, nil
-	case "float64":
-		return search.TypeFloat64, nil
-	case "uint32":
-		return search.TypeUint32, nil
-	case "uint64":
-		return search.TypeUint64, nil
-	case "bytes":
-		return search.TypeBytes, nil
-	}
-	return 0, fmt.Errorf("unknown type %q", s)
-}
-
-func parseFilterMode(s string) (search.FilterMode, error) {
-	switch s {
-	case "changed":
-		return search.FilterChanged, nil
-	case "unchanged":
-		return search.FilterUnchanged, nil
-	case "increased":
-		return search.FilterIncreased, nil
-	case "decreased":
-		return search.FilterDecreased, nil
-	case "value":
-		return search.FilterValue, nil
-	}
-	return 0, fmt.Errorf("unknown filter mode %q", s)
 }

@@ -41,20 +41,18 @@ func ParsePattern(s string) ([]PatternByte, error) {
 	return out, nil
 }
 
-// SearchPattern scans all rw memory regions for the byte pattern and prints matches.
-func SearchPattern(drv driver.Driver, pid int, pattern []PatternByte) {
+// SearchPattern scans all rw memory regions for the byte pattern and returns matched addresses.
+func SearchPattern(drv driver.Driver, pid int, pattern []PatternByte) ([]uintptr, error) {
 	if len(pattern) == 0 {
-		fmt.Println("Empty pattern")
-		return
+		return nil, fmt.Errorf("empty pattern")
 	}
 
 	regions, err := drv.ReadMaps(pid)
 	if err != nil {
-		fmt.Printf("Failed to read memory maps: %v\n", err)
-		return
+		return nil, fmt.Errorf("pattern search: read maps: %w", err)
 	}
 
-	found := 0
+	var results []uintptr
 	plen := len(pattern)
 	overlap := plen - 1
 
@@ -81,11 +79,9 @@ func SearchPattern(drv driver.Driver, pid int, pattern []PatternByte) {
 			for i := 0; i <= len(buf)-plen; i++ {
 				if matchPattern(buf[i:], pattern) {
 					addr := r.Start + uintptr(offset) - uintptr(len(prev)) + uintptr(i)
-					fmt.Printf("Found at 0x%x\n", addr)
-					found++
-					if found >= patternMaxResults {
-						fmt.Println("(limit reached, stopping)")
-						return
+					results = append(results, addr)
+					if len(results) >= patternMaxResults {
+						return results, nil
 					}
 				}
 			}
@@ -98,11 +94,7 @@ func SearchPattern(drv driver.Driver, pid int, pattern []PatternByte) {
 		}
 	}
 
-	if found == 0 {
-		fmt.Println("Not found")
-	} else {
-		fmt.Printf("Total: %d results\n", found)
-	}
+	return results, nil
 }
 
 func matchPattern(buf []byte, pattern []PatternByte) bool {

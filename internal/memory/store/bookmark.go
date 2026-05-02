@@ -23,34 +23,34 @@ func NewBookmarkList() *BookmarkList {
 
 func (bl *BookmarkList) Add(addr uintptr, label string, vt search.ValueType) {
 	bl.Entries = append(bl.Entries, Bookmark{Addr: addr, Label: label, VType: vt})
-	fmt.Printf("Bookmarked 0x%x (%s)\n", addr, label)
 }
 
-func (bl *BookmarkList) Remove(index int) {
+func (bl *BookmarkList) Remove(index int) error {
 	if index < 0 || index >= len(bl.Entries) {
-		fmt.Println("Invalid index")
-		return
+		return fmt.Errorf("invalid index %d", index)
 	}
 	bl.Entries = append(bl.Entries[:index], bl.Entries[index+1:]...)
+	return nil
 }
 
-func (bl *BookmarkList) List(drv driver.Driver, pid int) {
-	if len(bl.Entries) == 0 {
-		fmt.Println("No bookmarks")
-		return
-	}
-	for i, b := range bl.Entries {
-		cur, err := drv.Peek(pid, b.Addr, b.VType.Size())
+// Values reads the current value of each bookmark. Returns addr -> formatted value.
+func (bl *BookmarkList) Values(drv driver.Driver, pid int) map[uintptr]string {
+	out := make(map[uintptr]string, len(bl.Entries))
+	for _, b := range bl.Entries {
 		val := "?"
-		if err == nil {
-			val = search.FormatValue(cur, b.VType)
+		if pid != 0 {
+			if cur, err := drv.Peek(pid, b.Addr, b.VType.Size()); err == nil {
+				val = search.FormatValue(cur, b.VType)
+			}
 		}
-		fmt.Printf("[%d] 0x%x  %-20s  %s = %s\n", i, b.Addr, b.Label, b.VType, val)
+		out[b.Addr] = val
 	}
+	return out
 }
 
 // ModifyAll writes value to every bookmarked address that matches vt.
-func (bl *BookmarkList) ModifyAll(drv driver.Driver, pid int, value []byte, vt search.ValueType) {
+// Returns the number of successfully modified addresses.
+func (bl *BookmarkList) ModifyAll(drv driver.Driver, pid int, value []byte, vt search.ValueType) int {
 	count := 0
 	for _, b := range bl.Entries {
 		if b.VType != vt {
@@ -60,7 +60,7 @@ func (bl *BookmarkList) ModifyAll(drv driver.Driver, pid int, value []byte, vt s
 			count++
 		}
 	}
-	fmt.Printf("Modified %d bookmarks\n", count)
+	return count
 }
 
 func (bl *BookmarkList) Get(index int) (Bookmark, bool) {
