@@ -3,383 +3,629 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MemoDroid</title>
+<title>memdroid</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:monospace;background:#0d1117;color:#c9d1d9;display:flex;height:100vh;overflow:hidden}
-  aside{width:220px;background:#161b22;border-right:1px solid #30363d;display:flex;flex-direction:column;padding:12px 0}
-  aside h1{font-size:14px;color:#58a6ff;padding:0 16px 12px;border-bottom:1px solid #30363d;margin-bottom:8px}
-  nav button{width:100%;text-align:left;background:none;border:none;color:#8b949e;padding:8px 16px;cursor:pointer;font:inherit;font-size:13px}
-  nav button:hover{background:#21262d;color:#c9d1d9}
-  nav button.active{background:#21262d;color:#58a6ff;border-left:2px solid #58a6ff}
-  main{flex:1;display:flex;flex-direction:column;overflow:hidden}
-  #statusbar{background:#161b22;border-bottom:1px solid #30363d;padding:6px 16px;font-size:12px;color:#8b949e;display:flex;gap:16px;flex-wrap:wrap}
-  #statusbar span.on{color:#3fb950}
-  #statusbar span.off{color:#f85149}
-  #content{flex:1;overflow-y:auto;padding:16px}
-  .panel{display:none}.panel.active{display:block}
-  h2{font-size:14px;color:#e6edf3;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid #30363d}
-  .row{display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
-  input,select{background:#0d1117;border:1px solid #30363d;color:#c9d1d9;padding:6px 10px;border-radius:6px;font:inherit;font-size:13px}
-  input{flex:1;min-width:120px}
-  button.btn{background:#21262d;border:1px solid #30363d;color:#c9d1d9;padding:6px 14px;border-radius:6px;cursor:pointer;font:inherit;font-size:13px;white-space:nowrap}
-  button.btn:hover{background:#30363d}
-  button.btn.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
-  button.btn.primary:hover{background:#388bfd}
-  button.btn.danger{background:#b91c1c;border-color:#b91c1c;color:#fff}
-  button.btn.danger:hover{background:#dc2626}
-  button.btn.success{background:#1a7f37;border-color:#1a7f37;color:#fff}
-  button.btn.success:hover{background:#2ea043}
-  table{width:100%;border-collapse:collapse;font-size:13px}
-  th{text-align:left;color:#8b949e;padding:6px 8px;border-bottom:1px solid #30363d;font-weight:normal}
-  td{padding:6px 8px;border-bottom:1px solid #21262d;word-break:break-all}
-  tr:hover td{background:#161b22}
-  #log{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;height:140px;overflow-y:auto;font-size:12px;color:#8b949e;margin-top:12px;flex-shrink:0}
+:root {
+  --bg:        #0a0c10;
+  --bg2:       #111318;
+  --bg3:       #1a1d24;
+  --border:    #2a2d35;
+  --border2:   #363a45;
+  --text:      #cdd6e8;
+  --text2:     #7b8499;
+  --text3:     #4a5068;
+  --blue:      #4f8ef7;
+  --blue-dim:  #1e3a6e;
+  --green:     #3ecf6a;
+  --green-dim: #163325;
+  --red:       #f05252;
+  --red-dim:   #3a1515;
+  --yellow:    #f0c050;
+  --yellow-dim:#2e2510;
+  --purple:    #a78bfa;
+  --radius:    8px;
+  --font:      'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;flex-direction:column;font-size:13px}
+
+/* ── Top bar ─────────────────────────────────────────── */
+#topbar{
+  display:flex;align-items:center;gap:0;
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  height:48px;padding:0 16px;flex-shrink:0;
+}
+#topbar .logo{
+  font-size:15px;font-weight:600;color:var(--blue);
+  letter-spacing:.02em;margin-right:24px;white-space:nowrap;
+}
+#topbar .logo span{color:var(--text2);font-weight:400}
+#statusbar{display:flex;gap:6px;align-items:center;flex:1;flex-wrap:wrap;overflow:hidden}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;
+  border:1px solid transparent;white-space:nowrap;
+}
+.badge .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.badge.off{background:var(--bg3);border-color:var(--border);color:var(--text2)}
+.badge.off .dot{background:var(--text3)}
+.badge.on {background:var(--green-dim);border-color:#234d32;color:var(--green)}
+.badge.on .dot{background:var(--green)}
+.badge.info{background:var(--blue-dim);border-color:#1e3560;color:var(--blue)}
+.badge.warn{background:var(--yellow-dim);border-color:#3a2e0e;color:var(--yellow)}
+
+/* ── Layout ──────────────────────────────────────────── */
+#layout{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar ─────────────────────────────────────────── */
+aside{
+  width:200px;flex-shrink:0;
+  background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.nav-group{padding:12px 8px 4px;font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--text3);text-transform:uppercase}
+nav a{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 12px;border-radius:6px;margin:1px 6px;
+  color:var(--text2);cursor:pointer;text-decoration:none;
+  transition:background .1s,color .1s;font-size:12.5px;
+}
+nav a:hover{background:var(--bg3);color:var(--text)}
+nav a.active{background:var(--blue-dim);color:var(--blue)}
+nav a .icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+
+/* ── Main content ────────────────────────────────────── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+#content{flex:1;overflow-y:auto;padding:20px}
+
+.panel{display:none}.panel.active{display:block}
+
+/* ── Page title ──────────────────────────────────────── */
+.page-title{
+  font-size:16px;font-weight:600;color:var(--text);
+  margin-bottom:20px;display:flex;align-items:center;gap:10px;
+}
+.page-title .icon{font-size:18px}
+
+/* ── Cards ───────────────────────────────────────────── */
+.card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px;margin-bottom:16px;
+}
+.card-title{
+  font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--text3);margin-bottom:12px;
+}
+
+/* ── Form elements ───────────────────────────────────── */
+.row{display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap}
+.row:last-child{margin-bottom:0}
+
+input,select{
+  background:var(--bg);border:1px solid var(--border2);color:var(--text);
+  padding:7px 11px;border-radius:6px;font:inherit;font-size:12.5px;
+  outline:none;transition:border-color .15s;
+}
+input{flex:1;min-width:100px}
+input:focus,select:focus{border-color:var(--blue)}
+input::placeholder{color:var(--text3)}
+select{cursor:pointer}
+
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 13px;border-radius:6px;border:1px solid var(--border2);
+  background:var(--bg3);color:var(--text);cursor:pointer;font:inherit;
+  font-size:12.5px;white-space:nowrap;transition:background .1s,border-color .1s;
+}
+.btn:hover{background:var(--border);border-color:var(--border2)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.primary:hover{background:#6aa0ff;border-color:#6aa0ff}
+.btn.success{background:var(--green-dim);border-color:#234d32;color:var(--green)}
+.btn.success:hover{background:#1d4229}
+.btn.danger{background:var(--red-dim);border-color:#4a1a1a;color:var(--red)}
+.btn.danger:hover{background:#4a1a1a}
+.btn.sm{padding:4px 9px;font-size:11.5px}
+.btn.icon-btn{padding:6px 8px}
+
+/* ── Tables ──────────────────────────────────────────── */
+.table-wrap{overflow-x:auto;border-radius:6px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{
+  background:var(--bg3);color:var(--text2);padding:9px 12px;
+  font-weight:500;font-size:11px;letter-spacing:.04em;text-transform:uppercase;
+  border-bottom:1px solid var(--border);white-space:nowrap;text-align:left;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--border);word-break:break-all}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:var(--bg3)}
+.addr{color:var(--purple);font-size:12px}
+.val {color:var(--yellow)}
+
+/* ── Log / Terminal ──────────────────────────────────── */
+#log{
+  background:var(--bg2);border-top:1px solid var(--border);
+  padding:8px 16px;height:110px;overflow-y:auto;flex-shrink:0;
+  display:flex;flex-direction:column-reverse;
+}
+.log-line{font-size:11.5px;padding:1px 0;line-height:1.6}
+.log-line.ok {color:var(--green)}
+.log-line.err{color:var(--red)}
+.log-line .ts{color:var(--text3);margin-right:8px}
+
+/* ── Watch stream ────────────────────────────────────── */
+#watch-log{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  padding:12px;height:320px;overflow-y:auto;font-size:12px;
+  display:flex;flex-direction:column-reverse;
+}
+.watch-event{padding:2px 0;line-height:1.8;color:var(--blue)}
+.watch-event .wts{color:var(--text3);margin-right:8px}
+.watch-event .waddr{color:var(--purple);margin-right:4px}
+.watch-event .wprev{color:var(--text2)}
+.watch-event .warrow{color:var(--text3);margin:0 4px}
+.watch-event .wcur{color:var(--green)}
+
+/* ── Grid layout helpers ─────────────────────────────── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+
+/* ── Filter button group ─────────────────────────────── */
+.btn-group{display:flex;gap:4px;flex-wrap:wrap}
+
+/* ── Empty state ─────────────────────────────────────── */
+.empty{color:var(--text3);font-size:12px;padding:20px;text-align:center}
+
+/* ── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 </style>
 </head>
 <body>
 
+<!-- ── Top bar ── -->
+<div id="topbar">
+  <div class="logo">mem<span>droid</span></div>
+  <div id="statusbar">
+    <span class="badge off" id="sb-device"><span class="dot"></span>No device</span>
+    <span class="badge off" id="sb-attach"><span class="dot"></span>Not attached</span>
+    <span class="badge info" id="sb-type">int32</span>
+    <span class="badge info" id="sb-candidates">0 candidates</span>
+    <span class="badge warn" id="sb-frozen" style="display:none"></span>
+    <span class="badge info" id="sb-undo"  style="display:none"></span>
+  </div>
+</div>
+
+<div id="layout">
+
+<!-- ── Sidebar ── -->
 <aside>
-  <h1>MemoDroid</h1>
+  <div class="nav-group">Connection</div>
   <nav>
-    <button class="active" data-panel="device">Device</button>
-    <button data-panel="process">Process</button>
-    <button data-panel="search">Search</button>
-    <button data-panel="candidates">Candidates</button>
-    <button data-panel="pointer">Pointer Scan</button>
-    <button data-panel="memory">Memory</button>
-    <button data-panel="maps">Maps</button>
-    <button data-panel="watch">Watch</button>
-    <button data-panel="bookmarks">Bookmarks</button>
-    <button data-panel="session">Session</button>
+    <a class="active" data-panel="device"><span class="icon">📱</span>Device</a>
+    <a data-panel="process"><span class="icon">⚙️</span>Process</a>
+  </nav>
+  <div class="nav-group">Memory</div>
+  <nav>
+    <a data-panel="search"><span class="icon">🔍</span>Search</a>
+    <a data-panel="candidates"><span class="icon">📋</span>Candidates</a>
+    <a data-panel="memory"><span class="icon">✏️</span>Modify</a>
+    <a data-panel="pointer"><span class="icon">🔗</span>Pointer Scan</a>
+  </nav>
+  <div class="nav-group">Tools</div>
+  <nav>
+    <a data-panel="maps"><span class="icon">🗺️</span>Maps</a>
+    <a data-panel="watch"><span class="icon">👁️</span>Watch</a>
+    <a data-panel="bookmarks"><span class="icon">🔖</span>Bookmarks</a>
+    <a data-panel="session"><span class="icon">💾</span>Session</a>
   </nav>
 </aside>
 
-<main>
-  <div id="statusbar">
-    <span id="sb-device" class="off">No device</span>
-    <span id="sb-attach" class="off">Not attached</span>
-    <span id="sb-type">int32</span>
-    <span id="sb-candidates">—</span>
-    <span id="sb-frozen">—</span>
-    <span id="sb-undo">—</span>
-  </div>
+<!-- ── Main ── -->
+<div id="main">
+<div id="content">
 
-  <div id="content">
-
-    <!-- Device -->
-    <div class="panel active" id="panel-device">
-      <h2>ADB Device</h2>
-      <div class="row">
-        <button class="btn" onclick="loadDevices()">Refresh</button>
+  <!-- Device -->
+  <div class="panel active" id="panel-device">
+    <div class="page-title"><span class="icon">📱</span>ADB Device</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Connected devices</div>
+        <div class="row"><button class="btn" onclick="loadDevices()">↺ Refresh</button></div>
+        <div class="table-wrap">
+          <table><thead><tr><th>Serial</th><th></th></tr></thead>
+          <tbody id="device-table"><tr><td class="empty" colspan="2">No devices</td></tr></tbody></table>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Serial</th><th></th></tr></thead>
-        <tbody id="device-table"></tbody>
-      </table>
-      <h2 style="margin-top:16px">Wi-Fi Connection</h2>
-      <div class="row">
-        <input id="wifi-addr" placeholder="192.168.1.5:5555">
-        <button class="btn primary" onclick="connectWifi()">Connect</button>
-        <button class="btn danger" onclick="disconnectWifi()">Disconnect</button>
-      </div>
-    </div>
-
-    <!-- Process -->
-    <div class="panel" id="panel-process">
-      <h2>Process</h2>
-      <div class="row">
-        <input id="proc-filter" placeholder="filter by name…" oninput="filterProc()">
-        <button class="btn" onclick="loadProcessList()">Refresh</button>
-      </div>
-      <div class="row">
-        <input id="proc-search" placeholder="search by name…">
-        <button class="btn primary" onclick="searchProc()">Search &amp; Attach</button>
-      </div>
-      <table>
-        <thead><tr><th>PID</th><th>Name</th><th></th></tr></thead>
-        <tbody id="proc-table"></tbody>
-      </table>
-      <div style="margin-top:16px">
+      <div class="card">
+        <div class="card-title">Wi-Fi ADB</div>
         <div class="row">
-          <input id="attach-pid" placeholder="PID" style="max-width:120px">
-          <button class="btn primary" onclick="attachPID()">Attach</button>
-          <button class="btn danger" onclick="detach()">Detach</button>
-          <button class="btn" onclick="stopProc()">Stop</button>
-          <button class="btn" onclick="continueProc()">Continue</button>
+          <input id="wifi-addr" placeholder="192.168.1.5:5555">
+        </div>
+        <div class="row">
+          <button class="btn primary" onclick="connectWifi()">Connect</button>
+          <button class="btn danger"  onclick="disconnectWifi()">Disconnect</button>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- Search -->
-    <div class="panel" id="panel-search">
-      <h2>Search</h2>
+  <!-- Process -->
+  <div class="panel" id="panel-process">
+    <div class="page-title"><span class="icon">⚙️</span>Process</div>
+    <div class="card">
+      <div class="card-title">Quick attach by name</div>
       <div class="row">
-        <label style="color:#8b949e;font-size:13px">Type:</label>
-        <select id="value-type" onchange="setType()">
+        <input id="proc-search" placeholder="Process name (partial match)…">
+        <button class="btn primary" onclick="searchProc()">Search &amp; Attach</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Manual</div>
+      <div class="row">
+        <input id="attach-pid" placeholder="PID" style="max-width:120px">
+        <button class="btn primary" onclick="attachPID()">Attach</button>
+        <button class="btn danger"  onclick="detach()">Detach</button>
+        <button class="btn"         onclick="stopProc()">⏸ Stop</button>
+        <button class="btn"         onclick="continueProc()">▶ Continue</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Process list</div>
+      <div class="row">
+        <input id="proc-filter" placeholder="Filter by name…" oninput="filterProc()">
+        <button class="btn" onclick="loadProcessList()">↺ Refresh</button>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>PID</th><th>Name</th><th></th></tr></thead>
+        <tbody id="proc-table"><tr><td class="empty" colspan="3">—</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="panel" id="panel-search">
+    <div class="page-title"><span class="icon">🔍</span>Search</div>
+    <div class="card">
+      <div class="card-title">Value type</div>
+      <div class="row">
+        <select id="value-type" onchange="setType()" style="flex:0 0 auto">
           <option>int32</option><option>int64</option>
           <option>float32</option><option>float64</option>
           <option>uint32</option><option>uint64</option>
           <option>bytes</option>
         </select>
-      </div>
-      <div class="row">
-        <input id="search-val" placeholder="Value (decimal) or hex bytes e.g. FF00AB">
-        <button class="btn primary" onclick="searchValue()">Search</button>
-        <button class="btn" onclick="searchReset()">Reset</button>
-      </div>
-      <h2 style="margin-top:16px">Region Filter</h2>
-      <div class="row">
-        <select id="search-region">
-          <option value="">All</option>
-          <option value="heap">Heap</option>
-          <option value="stack">Stack</option>
-          <option value="anon">Anon</option>
-        </select>
-        <button class="btn primary" onclick="searchValueFiltered()">Search (Filtered)</button>
-      </div>
-      <h2 style="margin-top:16px">Filter</h2>
-      <div class="row">
-        <button class="btn" onclick="filter('changed')">Changed</button>
-        <button class="btn" onclick="filter('unchanged')">Unchanged</button>
-        <button class="btn" onclick="filter('increased')">Increased</button>
-        <button class="btn" onclick="filter('decreased')">Decreased</button>
-      </div>
-      <div class="row">
-        <input id="filter-val" placeholder="Specific value…">
-        <button class="btn" onclick="filter('value')">Filter: Value</button>
-      </div>
-      <h2 style="margin-top:16px">Pattern / String</h2>
-      <div class="row">
-        <input id="pattern-val" placeholder="FF 00 ?? 01">
-        <button class="btn" onclick="searchPattern()">Pattern Search</button>
-      </div>
-      <div class="row">
-        <input id="string-val" placeholder="String…">
-        <select id="string-enc"><option value="utf8">UTF-8</option><option value="utf16">UTF-16LE</option></select>
-        <button class="btn" onclick="searchString()">String Search</button>
+        <span style="color:var(--text3);font-size:12px">Changing type resets the session</span>
       </div>
     </div>
-
-    <!-- Candidates -->
-    <div class="panel" id="panel-candidates">
-      <h2>Candidates (<span id="cand-count">0</span>)</h2>
-      <div class="row">
-        <button class="btn" onclick="loadCandidates()">Refresh</button>
-        <button class="btn success" onclick="freezeAll()">Freeze All</button>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Value search</div>
+        <div class="row">
+          <input id="search-val" placeholder="Value…">
+          <button class="btn primary" onclick="searchValue()">Search</button>
+        </div>
+        <div class="row">
+          <select id="search-region" style="flex:0 0 auto">
+            <option value="">All regions</option>
+            <option value="heap">Heap only</option>
+            <option value="stack">Stack only</option>
+            <option value="anon">Anon only</option>
+          </select>
+          <button class="btn" onclick="searchValueFiltered()">Filtered search</button>
+        </div>
+        <div class="row" style="margin-top:4px">
+          <button class="btn danger sm" onclick="searchReset()">✕ Reset session</button>
+        </div>
       </div>
-      <table>
-        <thead><tr><th>Address</th><th>Value</th><th></th></tr></thead>
-        <tbody id="cand-table"></tbody>
-      </table>
-    </div>
-
-    <!-- Pointer Scan -->
-    <div class="panel" id="panel-pointer">
-      <h2>Pointer Scan</h2>
-      <div class="row">
-        <input id="ptr-addr" placeholder="Target address (hex, e.g. 0x7f…)">
-        <input id="ptr-depth" placeholder="Max depth [5]" style="max-width:120px">
-        <input id="ptr-offset" placeholder="Max offset [0x800]" style="max-width:130px">
-        <button class="btn primary" onclick="runPointerScan()">Scan</button>
-      </div>
-      <p style="color:#8b949e;font-size:12px;margin-bottom:8px">Scanning a large process may take 30-60 seconds.</p>
-      <table>
-        <thead><tr><th>Chain</th><th>Base</th><th>Offsets</th></tr></thead>
-        <tbody id="ptr-table"></tbody>
-      </table>
-    </div>
-
-    <!-- Memory -->
-    <div class="panel" id="panel-memory">
-      <h2>Modify</h2>
-      <div class="row">
-        <input id="mod-addr" placeholder="Address (hex)">
-        <input id="mod-val" placeholder="New value">
-        <button class="btn primary" onclick="memModify()">Write</button>
-        <button class="btn" onclick="memUndo()">Undo</button>
-      </div>
-      <h2 style="margin-top:16px">Freeze</h2>
-      <div class="row">
-        <input id="freeze-addr" placeholder="Address (hex)">
-        <input id="freeze-val" placeholder="Value to hold">
-        <button class="btn success" onclick="memFreeze()">Freeze</button>
-      </div>
-      <div class="row">
-        <input id="unfreeze-addr" placeholder="Address (hex)">
-        <button class="btn danger" onclick="memUnfreeze()">Unfreeze</button>
-      </div>
-      <h2 style="margin-top:16px">Frozen addresses</h2>
-      <div class="row"><button class="btn" onclick="loadFrozen()">Refresh</button></div>
-      <table>
-        <thead><tr><th>Address</th><th></th></tr></thead>
-        <tbody id="frozen-table"></tbody>
-      </table>
-    </div>
-
-    <!-- Maps -->
-    <div class="panel" id="panel-maps">
-      <h2>Memory Maps</h2>
-      <div class="row">
-        <input id="maps-filter" placeholder="filter by name…" oninput="filterMaps()">
-        <button class="btn" onclick="loadMaps()">Refresh</button>
-      </div>
-      <table>
-        <thead><tr><th>Start</th><th>End</th><th>Size</th><th>Name</th><th></th></tr></thead>
-        <tbody id="maps-table"></tbody>
-      </table>
-    </div>
-
-    <!-- Watch -->
-    <div class="panel" id="panel-watch">
-      <h2>Watch — Real-time</h2>
-      <p style="color:#8b949e;font-size:12px;margin-bottom:8px">Value changes appear below in real time via WebSocket.</p>
-      <div id="watch-log" style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;height:300px;overflow-y:auto;font-size:12px"></div>
-      <div class="row" style="margin-top:8px">
-        <button class="btn danger" onclick="document.getElementById('watch-log').innerHTML=''">Clear</button>
+      <div class="card">
+        <div class="card-title">Filter candidates</div>
+        <div class="btn-group" style="margin-bottom:10px">
+          <button class="btn sm" onclick="filter('changed')">Changed</button>
+          <button class="btn sm" onclick="filter('unchanged')">Unchanged</button>
+          <button class="btn sm" onclick="filter('increased')">Increased ↑</button>
+          <button class="btn sm" onclick="filter('decreased')">Decreased ↓</button>
+        </div>
+        <div class="row">
+          <input id="filter-val" placeholder="Specific value…">
+          <button class="btn sm" onclick="filter('value')">= Exact</button>
+        </div>
       </div>
     </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Byte pattern</div>
+        <div class="row">
+          <input id="pattern-val" placeholder="FF 00 ?? 01">
+          <button class="btn" onclick="searchPattern()">Search</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">String search</div>
+        <div class="row">
+          <input id="string-val" placeholder="String…">
+          <select id="string-enc" style="flex:0 0 auto"><option value="utf8">UTF-8</option><option value="utf16">UTF-16LE</option></select>
+          <button class="btn" onclick="searchString()">Search</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <!-- Bookmarks -->
-    <div class="panel" id="panel-bookmarks">
-      <h2>Bookmarks</h2>
+  <!-- Candidates -->
+  <div class="panel" id="panel-candidates">
+    <div class="page-title"><span class="icon">📋</span>Candidates <span id="cand-count" style="font-size:13px;color:var(--text2);font-weight:400;margin-left:4px">0</span></div>
+    <div class="card" style="padding:12px 16px">
+      <div class="row" style="margin-bottom:0">
+        <button class="btn" onclick="loadCandidates()">↺ Refresh</button>
+        <button class="btn success" onclick="freezeAll()">❄ Freeze All</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Address</th><th>Value</th><th style="width:180px"></th></tr></thead>
+      <tbody id="cand-table"><tr><td class="empty" colspan="3">No candidates</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- Memory -->
+  <div class="panel" id="panel-memory">
+    <div class="page-title"><span class="icon">✏️</span>Modify / Freeze</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Write value</div>
+        <div class="row"><input id="mod-addr" placeholder="Address (hex)"></div>
+        <div class="row">
+          <input id="mod-val" placeholder="New value">
+          <button class="btn primary" onclick="memModify()">Write</button>
+          <button class="btn" onclick="memUndo()">↩ Undo</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Freeze address</div>
+        <div class="row"><input id="freeze-addr" placeholder="Address (hex)"></div>
+        <div class="row">
+          <input id="freeze-val" placeholder="Value to hold">
+          <button class="btn success" onclick="memFreeze()">❄ Freeze</button>
+        </div>
+        <div class="row" style="margin-top:4px">
+          <input id="unfreeze-addr" placeholder="Address to unfreeze (hex)">
+          <button class="btn danger" onclick="memUnfreeze()">Unfreeze</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Frozen addresses</div>
+      <div class="row"><button class="btn" onclick="loadFrozen()">↺ Refresh</button></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Address</th><th style="width:120px"></th></tr></thead>
+        <tbody id="frozen-table"><tr><td class="empty" colspan="2">None frozen</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pointer Scan -->
+  <div class="panel" id="panel-pointer">
+    <div class="page-title"><span class="icon">🔗</span>Pointer Scan</div>
+    <div class="card">
+      <div class="card-title">Parameters</div>
       <div class="row">
-        <input id="bm-addr" placeholder="Address (hex)">
+        <input id="ptr-addr"   placeholder="Target address (0x…)">
+        <input id="ptr-depth"  placeholder="Max depth [5]"    style="max-width:140px">
+        <input id="ptr-offset" placeholder="Max offset [0x800]" style="max-width:150px">
+        <button class="btn primary" onclick="runPointerScan()">▶ Scan</button>
+      </div>
+      <p style="color:var(--text3);font-size:11.5px;margin-top:4px">May take 30–60 s on large processes.</p>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Chain</th><th>Base</th><th>Offsets</th></tr></thead>
+      <tbody id="ptr-table"><tr><td class="empty" colspan="3">No results</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- Maps -->
+  <div class="panel" id="panel-maps">
+    <div class="page-title"><span class="icon">🗺️</span>Memory Maps</div>
+    <div class="card" style="padding:12px 16px">
+      <div class="row" style="margin-bottom:0">
+        <input id="maps-filter" placeholder="Filter by name…" oninput="filterMaps()">
+        <button class="btn" onclick="loadMaps()">↺ Refresh</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Start</th><th>End</th><th>Size</th><th>Name</th><th style="width:100px"></th></tr></thead>
+      <tbody id="maps-table"><tr><td class="empty" colspan="5">—</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- Watch -->
+  <div class="panel" id="panel-watch">
+    <div class="page-title"><span class="icon">👁️</span>Watch — Real-time</div>
+    <div class="card" style="padding:12px 16px;margin-bottom:12px">
+      <div class="row" style="margin-bottom:0">
+        <span style="color:var(--text2);font-size:12px">Value changes appear below in real time via WebSocket.</span>
+        <button class="btn danger sm" style="margin-left:auto" onclick="document.getElementById('watch-log').innerHTML=''">✕ Clear</button>
+      </div>
+    </div>
+    <div id="watch-log"><div class="empty" style="padding:16px">Waiting for events…</div></div>
+  </div>
+
+  <!-- Bookmarks -->
+  <div class="panel" id="panel-bookmarks">
+    <div class="page-title"><span class="icon">🔖</span>Bookmarks</div>
+    <div class="card">
+      <div class="card-title">Add bookmark</div>
+      <div class="row">
+        <input id="bm-addr"  placeholder="Address (hex)">
         <input id="bm-label" placeholder="Label">
-        <button class="btn primary" onclick="bmAdd()">Add</button>
-        <button class="btn" onclick="loadBookmarks()">Refresh</button>
-      </div>
-      <div class="row">
-        <input id="bm-modval" placeholder="Value for Modify All">
-        <button class="btn success" onclick="bmModifyAll()">Modify All</button>
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>Address</th><th>Label</th><th>Type</th><th>Value</th><th></th></tr></thead>
-        <tbody id="bm-table"></tbody>
-      </table>
-    </div>
-
-    <!-- Session -->
-    <div class="panel" id="panel-session">
-      <h2>Save / Load</h2>
-      <div class="row">
-        <input id="sess-path" placeholder="memodroid.json">
-        <button class="btn primary" onclick="sessSave()">Save</button>
-        <button class="btn" onclick="sessLoad()">Load</button>
+        <button class="btn primary" onclick="bmAdd()">+ Add</button>
+        <button class="btn" onclick="loadBookmarks()">↺ Refresh</button>
       </div>
     </div>
+    <div class="card">
+      <div class="card-title">Modify all (matching current type)</div>
+      <div class="row">
+        <input id="bm-modval" placeholder="Value…">
+        <button class="btn success" onclick="bmModifyAll()">Write All</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr><th>#</th><th>Address</th><th>Label</th><th>Type</th><th>Value</th><th style="width:90px"></th></tr></thead>
+      <tbody id="bm-table"><tr><td class="empty" colspan="6">No bookmarks</td></tr></tbody></table>
+    </div>
+  </div>
 
-  </div><!-- #content -->
-  <div id="log"></div>
-</main>
+  <!-- Session -->
+  <div class="panel" id="panel-session">
+    <div class="page-title"><span class="icon">💾</span>Save / Load Session</div>
+    <div class="card">
+      <div class="card-title">State file (bookmarks + candidates)</div>
+      <div class="row">
+        <input id="sess-path" placeholder="memdroid.json">
+        <button class="btn primary" onclick="sessSave()">💾 Save</button>
+        <button class="btn"         onclick="sessLoad()">📂 Load</button>
+      </div>
+      <p style="color:var(--text3);font-size:11.5px;margin-top:8px">
+        Session file path is relative to where memdroid was started.
+      </p>
+    </div>
+  </div>
+
+</div><!-- #content -->
+
+<!-- ── Log bar ── -->
+<div id="log"></div>
+</div><!-- #main -->
+</div><!-- #layout -->
 
 <script>
 const api = (path, body) =>
-  fetch('/api' + path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {})
-  .then(r => r.json());
+  fetch('/api' + path, body
+    ? {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}
+    : {}
+  ).then(r => r.json()).catch(e => ({error: e.message}));
 
-function log(msg, ok=true) {
+// ── Log ──────────────────────────────────────────────
+function log(msg, ok = true) {
   const d = document.getElementById('log');
   const line = document.createElement('div');
-  line.style.color = ok ? '#3fb950' : '#f85149';
-  line.textContent = new Date().toLocaleTimeString() + '  ' + msg;
+  line.className = 'log-line ' + (ok ? 'ok' : 'err');
+  const ts = new Date().toLocaleTimeString('en', {hour12:false});
+  line.innerHTML = `<span class="ts">${ts}</span>${escHtml(msg)}`;
   d.prepend(line);
-  if (d.children.length > 100) d.lastChild.remove();
+  while (d.children.length > 80) d.lastChild.remove();
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// nav
-document.querySelectorAll('nav button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+// ── Nav ───────────────────────────────────────────────
+document.querySelectorAll('nav a[data-panel]').forEach(a => {
+  a.addEventListener('click', () => {
+    document.querySelectorAll('nav a').forEach(x => x.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    document.getElementById('panel-' + btn.dataset.panel).classList.add('active');
+    a.classList.add('active');
+    document.getElementById('panel-' + a.dataset.panel).classList.add('active');
   });
 });
 
+// ── Status bar ────────────────────────────────────────
 async function refreshStatus() {
   const s = await api('/status');
-  const sbDev = document.getElementById('sb-device');
-  sbDev.textContent = s.device ? `Device: ${s.device}` : 'No device';
-  sbDev.className = s.device ? 'on' : 'off';
-  const sb = document.getElementById('sb-attach');
-  sb.textContent = s.attached ? `PID: ${s.pid}` : 'Not attached';
-  sb.className = s.attached ? 'on' : 'off';
+  if (s.error) return;
+
+  const dev = document.getElementById('sb-device');
+  dev.innerHTML = `<span class="dot"></span>${s.device ? s.device : 'No device'}`;
+  dev.className = 'badge ' + (s.device ? 'on' : 'off');
+
+  const att = document.getElementById('sb-attach');
+  att.innerHTML = `<span class="dot"></span>${s.attached ? 'PID ' + s.pid : 'Not attached'}`;
+  att.className = 'badge ' + (s.attached ? 'on' : 'off');
+
   document.getElementById('sb-type').textContent = s.value_type;
-  document.getElementById('sb-candidates').textContent = `Candidates: ${s.candidates}`;
-  document.getElementById('sb-frozen').textContent = `Frozen: ${(s.frozen||[]).length}`;
-  document.getElementById('sb-undo').textContent = `Undo: ${s.undo_depth}`;
+  document.getElementById('sb-candidates').textContent = s.candidates + ' candidates';
   document.getElementById('value-type').value = s.value_type;
+
+  const frozen = document.getElementById('sb-frozen');
+  if (s.frozen && s.frozen.length) {
+    frozen.textContent = '❄ ' + s.frozen.length + ' frozen';
+    frozen.style.display = '';
+  } else { frozen.style.display = 'none'; }
+
+  const undo = document.getElementById('sb-undo');
+  if (s.undo_depth > 0) {
+    undo.textContent = '↩ undo ' + s.undo_depth;
+    undo.style.display = '';
+  } else { undo.style.display = 'none'; }
 }
 setInterval(refreshStatus, 2000);
 refreshStatus();
 
-// --- WebSocket watch ---
+// ── WebSocket watch ───────────────────────────────────
 (function() {
-  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const ws = new WebSocket(`${wsProto}//${location.host}/ws/watch`);
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/ws/watch`);
   ws.onmessage = (e) => {
     const ev = JSON.parse(e.data);
     const wl = document.getElementById('watch-log');
+    const ts = new Date().toLocaleTimeString('en', {hour12:false});
     const line = document.createElement('div');
-    line.style.color = '#58a6ff';
-    line.textContent = `${new Date().toLocaleTimeString()}  ${ev.addr}: ${ev.prev} → ${ev.cur}`;
+    line.className = 'watch-event';
+    line.innerHTML =
+      `<span class="wts">${ts}</span>` +
+      `<span class="waddr">${escHtml(ev.addr)}</span>` +
+      `<span class="wprev">${escHtml(ev.prev)}</span>` +
+      `<span class="warrow">→</span>` +
+      `<span class="wcur">${escHtml(ev.cur)}</span>`;
     wl.prepend(line);
-    if (wl.children.length > 200) wl.lastChild.remove();
+    while (wl.children.length > 200) wl.lastChild.remove();
   };
 })();
 
-// --- Device ---
+// ── Device ───────────────────────────────────────────
 async function loadDevices() {
   const list = await api('/device/list');
   const tb = document.getElementById('device-table');
-  tb.innerHTML = '';
-  if (!list.length) {
-    tb.innerHTML = '<tr><td colspan="2" style="color:#8b949e">No devices connected</td></tr>';
-    return;
-  }
-  list.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${d.serial}</td>
-      <td><button class="btn primary" onclick="selectDevice('${d.serial}')">Select</button></td>`;
-    tb.appendChild(tr);
-  });
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="2">No devices connected</td></tr>'; return; }
+  tb.innerHTML = list.map(d =>
+    `<tr><td class="addr">${escHtml(d.serial)}</td>
+     <td><button class="btn sm primary" onclick="selectDevice('${escHtml(d.serial)}')">Select</button></td></tr>`
+  ).join('');
 }
 async function selectDevice(serial) {
   const r = await api('/device/select', {serial});
-  log(r.error ? r.error : `Device: ${serial}`, !r.error);
+  log(r.error || `Device selected: ${serial}`, !r.error);
   refreshStatus();
 }
 async function connectWifi() {
   const addr = document.getElementById('wifi-addr').value.trim();
   if (!addr) return;
   const r = await api('/device/connect-wifi', {addr});
-  log(r.error ? r.error : `Connected: ${addr}`, !r.error);
+  log(r.error || `Connected: ${addr}`, !r.error);
   refreshStatus(); loadDevices();
 }
 async function disconnectWifi() {
   const addr = document.getElementById('wifi-addr').value.trim();
   if (!addr) return;
   const r = await api('/device/disconnect-wifi', {addr});
-  log(r.error ? r.error : `Disconnected: ${addr}`, !r.error);
+  log(r.error || `Disconnected: ${addr}`, !r.error);
   refreshStatus(); loadDevices();
 }
 
-// --- Process ---
+// ── Process ──────────────────────────────────────────
 let allProcs = [];
 async function loadProcessList() {
   allProcs = await api('/process/list');
+  if (allProcs.error) { log(allProcs.error, false); allProcs = []; }
   renderProcs(allProcs);
 }
 function renderProcs(list) {
   const tb = document.getElementById('proc-table');
-  tb.innerHTML = '';
-  list.forEach(p => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.pid}</td><td>${p.name}</td>
-      <td><button class="btn" onclick="doAttach(${p.pid})">Attach</button></td>`;
-    tb.appendChild(tr);
-  });
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">—</td></tr>'; return; }
+  tb.innerHTML = list.map(p =>
+    `<tr><td style="color:var(--text2)">${p.pid}</td>
+     <td>${escHtml(p.name)}</td>
+     <td><button class="btn sm" onclick="doAttach(${p.pid})">Attach</button></td></tr>`
+  ).join('');
 }
 function filterProc() {
   const q = document.getElementById('proc-filter').value.toLowerCase();
@@ -390,16 +636,15 @@ async function searchProc() {
   if (!name) return;
   const matches = await api('/process/search', {name});
   if (matches.error) { log(matches.error, false); return; }
-  if (!matches.length) { log('No matching process', false); return; }
+  if (!matches.length) { log('No matching process found', false); return; }
   if (matches.length === 1) { doAttach(matches[0].pid); return; }
-  // Multiple: show in table
   renderProcs(matches);
   document.querySelector('[data-panel="process"]').click();
   log(`Found ${matches.length} matches — click Attach`);
 }
 async function doAttach(pid) {
   const r = await api('/process/attach', {pid});
-  log(r.error ? r.error : `Attached PID ${pid}`, !r.error);
+  log(r.error || `Attached PID ${pid}`, !r.error);
   refreshStatus();
 }
 async function attachPID() {
@@ -407,75 +652,79 @@ async function attachPID() {
   if (!pid) return;
   doAttach(pid);
 }
-async function detach()       { const r = await api('/process/detach', {}); log(r.error||'Detached', !r.error); refreshStatus(); }
-async function stopProc()     { const r = await api('/process/stop', {});   log(r.error||'Stopped', !r.error); }
+async function detach()       { const r = await api('/process/detach',   {}); log(r.error||'Detached',  !r.error); refreshStatus(); }
+async function stopProc()     { const r = await api('/process/stop',     {}); log(r.error||'Stopped',   !r.error); }
 async function continueProc() { const r = await api('/process/continue', {}); log(r.error||'Continued', !r.error); }
 
-// --- Search ---
-async function setType() {
-  const t = document.getElementById('value-type').value;
-  log('Value type: ' + t);
-}
+// ── Search ───────────────────────────────────────────
+function setType() { log('Value type: ' + document.getElementById('value-type').value); }
 async function searchValue() {
   const val = document.getElementById('search-val').value;
-  const t = document.getElementById('value-type').value;
-  const r = await api('/search/value', {value: val, type: t});
-  log(r.error ? r.error : `Found ${r.candidates} candidates`, !r.error);
+  const t   = document.getElementById('value-type').value;
+  const r   = await api('/search/value', {value: val, type: t});
+  log(r.error || `Found ${r.candidates} candidates`, !r.error);
   refreshStatus();
 }
 async function searchValueFiltered() {
-  const val = document.getElementById('search-val').value;
-  const t = document.getElementById('value-type').value;
+  const val    = document.getElementById('search-val').value;
+  const t      = document.getElementById('value-type').value;
   const region = document.getElementById('search-region').value;
-  const r = await api('/search/value', {value: val, type: t, region});
-  log(r.error ? r.error : `Found ${r.candidates} candidates`, !r.error);
+  const r      = await api('/search/value', {value: val, type: t, region});
+  log(r.error || `Found ${r.candidates} candidates`, !r.error);
   refreshStatus();
 }
 async function filter(mode) {
-  const val = document.getElementById('filter-val').value;
+  const val  = document.getElementById('filter-val').value;
   const body = {mode};
   if (mode === 'value') body.value = val;
   const r = await api('/search/filter', body);
-  log(r.error ? r.error : `Remaining: ${r.candidates}`, !r.error);
+  log(r.error || `Remaining: ${r.candidates}`, !r.error);
   refreshStatus();
 }
-async function searchReset() { const r = await api('/search/reset', {}); log(r.error||'Reset', !r.error); refreshStatus(); }
+async function searchReset() {
+  const r = await api('/search/reset', {});
+  log(r.error||'Session reset', !r.error);
+  refreshStatus();
+}
 async function searchPattern() {
   const r = await api('/search/pattern', {pattern: document.getElementById('pattern-val').value});
-  log(r.error||'Pattern search done (see CLI output)', !r.error);
+  log(r.error || `Pattern: ${r.count} results`, !r.error);
 }
 async function searchString() {
   const r = await api('/search/string', {
-    value: document.getElementById('string-val').value,
+    value:    document.getElementById('string-val').value,
     encoding: document.getElementById('string-enc').value,
   });
-  log(r.error||'String search done (see CLI output)', !r.error);
+  log(r.error || `String: ${r.count} results`, !r.error);
 }
 
-// --- Candidates ---
+// ── Candidates ───────────────────────────────────────
 async function loadCandidates() {
   const list = await api('/search/candidates');
   document.getElementById('cand-count').textContent = list.length;
   const tb = document.getElementById('cand-table');
-  tb.innerHTML = '';
-  list.forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.addr}</td><td>${c.value}</td>
-      <td><button class="btn" onclick="prefillModify('${c.addr}','${c.value}')">Edit</button>
-          <button class="btn" onclick="prefillFreeze('${c.addr}','${c.value}')">Freeze</button>
-          <button class="btn" onclick="prefillPointer('${c.addr}')">Ptr</button></td>`;
-    tb.appendChild(tr);
-  });
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">No candidates</td></tr>'; return; }
+  tb.innerHTML = list.map(c =>
+    `<tr>
+      <td class="addr">${escHtml(c.addr)}</td>
+      <td class="val">${escHtml(c.value)}</td>
+      <td>
+        <button class="btn sm" onclick="prefillModify('${escHtml(c.addr)}','${escHtml(c.value)}')">Edit</button>
+        <button class="btn sm success" onclick="prefillFreeze('${escHtml(c.addr)}','${escHtml(c.value)}')">❄</button>
+        <button class="btn sm" onclick="prefillPointer('${escHtml(c.addr)}')">Ptr</button>
+      </td>
+    </tr>`
+  ).join('');
 }
 function prefillModify(addr, val) {
   document.querySelector('[data-panel="memory"]').click();
   document.getElementById('mod-addr').value = addr;
-  document.getElementById('mod-val').value = val;
+  document.getElementById('mod-val').value  = val;
 }
 function prefillFreeze(addr, val) {
   document.querySelector('[data-panel="memory"]').click();
   document.getElementById('freeze-addr').value = addr;
-  document.getElementById('freeze-val').value = val;
+  document.getElementById('freeze-val').value  = val;
 }
 function prefillPointer(addr) {
   document.querySelector('[data-panel="pointer"]').click();
@@ -483,58 +732,61 @@ function prefillPointer(addr) {
 }
 async function freezeAll() {
   const r = await api('/memory/freeze-all', {});
-  log(r.error||'Freeze all done', !r.error);
+  log(r.error || `Frozen ${r.count} addresses`, !r.error);
   refreshStatus();
 }
 
-// --- Pointer Scan ---
+// ── Pointer Scan ─────────────────────────────────────
 async function runPointerScan() {
-  const addr = document.getElementById('ptr-addr').value.trim();
-  const depth = parseInt(document.getElementById('ptr-depth').value) || 0;
+  const addr   = document.getElementById('ptr-addr').value.trim();
+  const depth  = parseInt(document.getElementById('ptr-depth').value)  || 0;
   const offset = document.getElementById('ptr-offset').value.trim();
-  const body = {addr};
-  if (depth) body.max_depth = depth;
-  if (offset) body.max_offset = parseInt(offset, 16) || parseInt(offset);
+  const body   = {addr};
+  if (depth)  body.max_depth  = depth;
+  if (offset) body.max_offset = parseInt(offset,16)||parseInt(offset);
   log('Pointer scan started…');
   const r = await api('/pointer/scan', body);
   if (r.error) { log(r.error, false); return; }
   const tb = document.getElementById('ptr-table');
-  tb.innerHTML = '';
-  if (!r.chains || !r.chains.length) { log('No chains found', false); return; }
-  r.chains.forEach(c => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.path}</td><td>${c.base}</td><td>${(c.offsets||[]).map(o=>'0x'+o.toString(16)).join(', ')}</td>`;
-    tb.appendChild(tr);
-  });
+  if (!r.chains || !r.chains.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">No chains found</td></tr>'; log('No chains found', false); return; }
+  tb.innerHTML = r.chains.map(c =>
+    `<tr>
+      <td style="color:var(--blue)">${escHtml(c.path)}</td>
+      <td class="addr">${escHtml(c.base)}</td>
+      <td style="color:var(--text2)">${(c.offsets||[]).map(o=>'0x'+o.toString(16)).join(', ')}</td>
+    </tr>`
+  ).join('');
   log(`Found ${r.chains.length} chains`);
 }
 
-// --- Memory ---
+// ── Memory ───────────────────────────────────────────
 async function memModify() {
   const r = await api('/memory/modify', {addr: document.getElementById('mod-addr').value, value: document.getElementById('mod-val').value});
-  log(r.error||'Modified', !r.error);
+  log(r.error||'Written', !r.error);
 }
-async function memUndo()    { const r = await api('/memory/undo', {}); log(r.error ? r.error : `Undone (depth: ${r.undo_depth})`, !r.error); refreshStatus(); }
-async function memFreeze()  {
+async function memUndo() {
+  const r = await api('/memory/undo', {});
+  log(r.error ? r.error : `Undone (depth: ${r.undo_depth})`, !r.error);
+  refreshStatus();
+}
+async function memFreeze() {
   const r = await api('/memory/freeze', {addr: document.getElementById('freeze-addr').value, value: document.getElementById('freeze-val').value});
   log(r.error||'Frozen', !r.error);
   loadFrozen();
 }
-async function memUnfreeze(){
+async function memUnfreeze() {
   const r = await api('/memory/unfreeze', {addr: document.getElementById('unfreeze-addr').value});
   log(r.error||'Unfrozen', !r.error);
   loadFrozen();
 }
 async function loadFrozen() {
   const list = await api('/memory/frozen');
-  const tb = document.getElementById('frozen-table');
-  tb.innerHTML = '';
-  list.forEach(a => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${a}</td>
-      <td><button class="btn danger" onclick="quickUnfreeze('${a}')">Unfreeze</button></td>`;
-    tb.appendChild(tr);
-  });
+  const tb   = document.getElementById('frozen-table');
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="2">None frozen</td></tr>'; return; }
+  tb.innerHTML = list.map(a =>
+    `<tr><td class="addr">${escHtml(a)}</td>
+     <td><button class="btn sm danger" onclick="quickUnfreeze('${escHtml(a)}')">Unfreeze</button></td></tr>`
+  ).join('');
 }
 async function quickUnfreeze(addr) {
   const r = await api('/memory/unfreeze', {addr});
@@ -542,23 +794,26 @@ async function quickUnfreeze(addr) {
   loadFrozen();
 }
 
-// --- Maps ---
+// ── Maps ─────────────────────────────────────────────
 let allMaps = [];
 async function loadMaps() {
   allMaps = await api('/maps');
-  if (allMaps.error) { log(allMaps.error, false); return; }
+  if (allMaps.error) { log(allMaps.error, false); allMaps = []; return; }
   renderMaps(allMaps);
 }
 function renderMaps(list) {
   const tb = document.getElementById('maps-table');
-  tb.innerHTML = '';
-  list.forEach(r => {
-    const tr = document.createElement('tr');
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="5">—</td></tr>'; return; }
+  tb.innerHTML = list.map(r => {
     const kb = (r.size / 1024).toFixed(0);
-    tr.innerHTML = `<td>${r.start}</td><td>${r.end}</td><td>${kb} KB</td><td>${r.name||'[anon]'}</td>
-      <td><button class="btn" onclick="prefillSearch('${r.start}','${r.end}')">Search</button></td>`;
-    tb.appendChild(tr);
-  });
+    return `<tr>
+      <td class="addr">${escHtml(r.start)}</td>
+      <td class="addr">${escHtml(r.end)}</td>
+      <td style="color:var(--text2)">${kb} KB</td>
+      <td>${escHtml(r.name||'[anon]')}</td>
+      <td><button class="btn sm" onclick="prefillSearch('${escHtml(r.start)}','${escHtml(r.end)}')">Search</button></td>
+    </tr>`;
+  }).join('');
 }
 function filterMaps() {
   const q = document.getElementById('maps-filter').value.toLowerCase();
@@ -566,22 +821,24 @@ function filterMaps() {
 }
 function prefillSearch(start, end) {
   document.querySelector('[data-panel="search"]').click();
-  document.getElementById('search-region').value = '';
-  log(`Region ${start}-${end} — use Custom Range in CLI for region-filtered search`);
+  log(`Region ${start} – ${end} selected`);
 }
 
-// --- Bookmarks ---
+// ── Bookmarks ─────────────────────────────────────────
 async function loadBookmarks() {
   const list = await api('/bookmark/list');
-  const tb = document.getElementById('bm-table');
-  tb.innerHTML = '';
-  list.forEach(b => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${b.index}</td><td>${b.addr}</td><td>${b.label}</td>
-      <td>${b.type}</td><td>${b.value}</td>
-      <td><button class="btn danger" onclick="bmRemove(${b.index})">Remove</button></td>`;
-    tb.appendChild(tr);
-  });
+  const tb   = document.getElementById('bm-table');
+  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="6">No bookmarks</td></tr>'; return; }
+  tb.innerHTML = list.map(b =>
+    `<tr>
+      <td style="color:var(--text3)">${b.index}</td>
+      <td class="addr">${escHtml(b.addr)}</td>
+      <td>${escHtml(b.label)}</td>
+      <td style="color:var(--text2)">${escHtml(b.type)}</td>
+      <td class="val">${escHtml(b.value)}</td>
+      <td><button class="btn sm danger" onclick="bmRemove(${b.index})">✕</button></td>
+    </tr>`
+  ).join('');
 }
 async function bmAdd() {
   const r = await api('/bookmark/add', {addr: document.getElementById('bm-addr').value, label: document.getElementById('bm-label').value});
@@ -595,16 +852,16 @@ async function bmRemove(idx) {
 }
 async function bmModifyAll() {
   const r = await api('/bookmark/modify-all', {value: document.getElementById('bm-modval').value});
-  log(r.error||'Modified all bookmarks', !r.error);
+  log(r.error || `Modified ${r.count} bookmarks`, !r.error);
   loadBookmarks();
 }
 
-// --- Session ---
-function sessPath() { return document.getElementById('sess-path').value || 'memodroid.json'; }
-async function sessSave() { const r = await api('/session/save', {path: sessPath()}); log(r.error ? r.error : `Saved to ${r.path}`, !r.error); }
-async function sessLoad() { const r = await api('/session/load', {path: sessPath()}); log(r.error ? r.error : `Loaded from ${r.path}`, !r.error); refreshStatus(); }
+// ── Session ───────────────────────────────────────────
+function sessPath() { return document.getElementById('sess-path').value || 'memdroid.json'; }
+async function sessSave() { const r = await api('/session/save', {path: sessPath()}); log(r.error ? r.error : `Saved → ${r.path}`, !r.error); }
+async function sessLoad() { const r = await api('/session/load', {path: sessPath()}); log(r.error ? r.error : `Loaded ← ${r.path}`, !r.error); refreshStatus(); }
 
-// initial load
+// ── Init ──────────────────────────────────────────────
 loadDevices();
 loadProcessList();
 </script>
