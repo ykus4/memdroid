@@ -106,15 +106,15 @@ pt  Pointer Scan       →  find stable address for next session
 
 ```mermaid
 graph TD
-    A[memdroid binary] --> B[CLI\nmain goroutine]
-    A --> C[HTTP Server :8080\nREST API + WebSocket]
-    B --> D[app.State\nmutex-protected]
+    A["memdroid binary"] --> B["CLI (main goroutine)"]
+    A --> C["HTTP Server :8080 — REST API + WebSocket"]
+    B --> D["app.State (mutex-protected)"]
     C --> D
-    D --> E[driver.Driver]
-    E --> F[adb shell ps -A\nListProcesses]
-    E --> G[kill -STOP / -CONT via su\nAttach / Detach]
-    E --> H[/proc/pid/mem via dd+base64\nPeek / Poke]
-    E --> I[/proc/pid/maps\nReadMaps]
+    D --> E["driver.Driver"]
+    E --> F["ListProcesses — adb shell ps -A"]
+    E --> G["Attach/Detach — kill -STOP/-CONT via su"]
+    E --> H["Peek/Poke — /proc/pid/mem via dd+base64"]
+    E --> I["ReadMaps — /proc/pid/maps"]
 ```
 
 ---
