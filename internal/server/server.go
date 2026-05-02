@@ -20,12 +20,11 @@ var staticFiles embed.FS
 // Start launches the HTTP server on addr (e.g. ":8080") in the foreground.
 // Call it in a goroutine from main.
 func Start(addr string, state *app.State, d *adb.ADB) error {
-	// Wire watch events to WebSocket broadcast.
-	watch.BroadcastFunc = func(a uintptr, prev, cur string) {
+	state.Watcher.OnChange = func(ev watch.ChangeEvent) {
 		wswatch.Broadcast(wswatch.Event{
-			Addr: fmt.Sprintf("0x%x", a),
-			Prev: prev,
-			Cur:  cur,
+			Addr: fmt.Sprintf("0x%x", ev.Addr),
+			Prev: ev.Prev,
+			Cur:  ev.Cur,
 		})
 	}
 
@@ -39,7 +38,6 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 
 	h := &handler{state: state, adb: d}
 
-	// WebSocket for real-time watch events.
 	mux.Handle("/ws/watch", websocket.Handler(func(ws *websocket.Conn) {
 		wswatch.Register(ws)
 	}))
@@ -60,7 +58,7 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 	mux.HandleFunc("/api/process/stop", h.processStop)
 	mux.HandleFunc("/api/process/continue", h.processContinue)
 
-	// Maps (region browser)
+	// Maps
 	mux.HandleFunc("/api/maps", h.mapsList)
 
 	// Search

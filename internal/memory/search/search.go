@@ -1,28 +1,24 @@
 package search
 
 import (
-	"fmt"
-
 	"memodroid/internal/driver"
 )
 
 // Search scans all rw memory regions for target and stores results in the session.
-func (s *Session) Search(target []byte) {
-	s.SearchFiltered(target, driver.RegionAll, 0, 0)
+func (s *Session) Search(target []byte) error {
+	return s.SearchFiltered(target, driver.RegionAll, 0, 0)
 }
 
 // SearchFiltered scans memory with a region filter applied.
-func (s *Session) SearchFiltered(target []byte, filter driver.RegionFilter, customStart, customEnd uintptr) {
+func (s *Session) SearchFiltered(target []byte, filter driver.RegionFilter, customStart, customEnd uintptr) error {
 	regions, err := s.Driver.ReadMapsFiltered(s.PID, filter, customStart, customEnd)
 	if err != nil {
-		fmt.Printf("Failed to read memory maps: %v\n", err)
-		return
+		return err
 	}
 
 	found := make(map[uintptr][]byte)
 
 	if s.ValueType == TypeBytes {
-		// Byte-sequence search: scan chunk-by-chunk for variable-length target.
 		searchBytesInRegions(s.Driver, s.PID, regions, target, found)
 	} else {
 		size := s.ValueType.Size()
@@ -47,7 +43,7 @@ func (s *Session) SearchFiltered(target []byte, filter driver.RegionFilter, cust
 
 	s.Candidates = found
 	s.active = true
-	fmt.Printf("Found %d addresses\n", len(found))
+	return nil
 }
 
 func searchBytesInRegions(drv driver.Driver, pid int, regions []driver.Region, target []byte, found map[uintptr][]byte) {

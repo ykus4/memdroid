@@ -129,6 +129,16 @@ memdroid
 
 ---
 
+## Disclaimer
+
+This tool is intended for **security research, CTF challenges, and personal educational use on devices you own**.
+
+- Only use memdroid on devices and applications you have explicit permission to analyze
+- Do not use this tool to cheat in online multiplayer games or circumvent anti-cheat systems
+- The authors are not responsible for any misuse or damage caused by this software
+
+---
+
 ## Notes
 
 - Requires **root on the Android device** (`su` must be available in `adb shell`)

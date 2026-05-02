@@ -4,8 +4,10 @@ import (
 	"sync"
 
 	"memodroid/internal/driver"
+	"memodroid/internal/memory/modify"
 	"memodroid/internal/memory/search"
 	"memodroid/internal/memory/store"
+	"memodroid/internal/memory/watch"
 )
 
 // State is the single shared mutable state of the tool.
@@ -17,6 +19,10 @@ type State struct {
 	valueType search.ValueType
 	session   *search.Session
 	bookmarks *store.BookmarkList
+
+	Freezer   *modify.Freezer
+	UndoStack *modify.UndoStack
+	Watcher   *watch.Watcher
 }
 
 func NewState(drv driver.Driver) *State {
@@ -24,6 +30,9 @@ func NewState(drv driver.Driver) *State {
 		drv:       drv,
 		valueType: search.TypeInt32,
 		bookmarks: store.NewBookmarkList(),
+		Freezer:   modify.NewFreezer(),
+		UndoStack: modify.NewUndoStack(),
+		Watcher:   watch.NewWatcher(),
 	}
 }
 

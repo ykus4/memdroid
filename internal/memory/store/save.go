@@ -27,6 +27,7 @@ type saveFile struct {
 	Session   *savedSession   `json:"session,omitempty"`
 }
 
+// SaveState serializes bookmarks and the active search session to a JSON file.
 func SaveState(path string, bl *BookmarkList, s *search.Session) error {
 	sf := saveFile{}
 
@@ -57,6 +58,8 @@ func SaveState(path string, bl *BookmarkList, s *search.Session) error {
 	return os.WriteFile(path, data, stateFilePerms)
 }
 
+// LoadState deserializes bookmarks and session from a JSON file.
+// The loaded session has a nil Driver; the caller must set it before searching.
 func LoadState(path string, bl *BookmarkList, s **search.Session) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -83,7 +86,6 @@ func LoadState(path string, bl *BookmarkList, s **search.Session) error {
 		for key, val := range sf.Session.Candidates {
 			var addr uint64
 			if _, err := fmt.Sscanf(key, "0x%x", &addr); err != nil {
-				fmt.Printf("Warning: skipping malformed address key %q: %v\n", key, err)
 				continue
 			}
 			loaded.Candidates[uintptr(addr)] = val
@@ -92,10 +94,5 @@ func LoadState(path string, bl *BookmarkList, s **search.Session) error {
 		*s = loaded
 	}
 
-	fmt.Printf("Loaded: %d bookmarks", len(bl.Entries))
-	if sf.Session != nil {
-		fmt.Printf(", %d candidates", len(sf.Session.Candidates))
-	}
-	fmt.Println()
 	return nil
 }

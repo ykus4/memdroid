@@ -213,6 +213,44 @@ func EqualBytes(a, b []byte) bool {
 	return true
 }
 
+// ParseValueType converts a string name to ValueType.
+func ParseValueType(s string) (ValueType, error) {
+	switch s {
+	case "int32":
+		return TypeInt32, nil
+	case "int64":
+		return TypeInt64, nil
+	case "float32":
+		return TypeFloat32, nil
+	case "float64":
+		return TypeFloat64, nil
+	case "uint32":
+		return TypeUint32, nil
+	case "uint64":
+		return TypeUint64, nil
+	case "bytes":
+		return TypeBytes, nil
+	}
+	return 0, fmt.Errorf("unknown value type %q", s)
+}
+
+// ParseFilterMode converts a string name to FilterMode.
+func ParseFilterMode(s string) (FilterMode, error) {
+	switch s {
+	case "changed":
+		return FilterChanged, nil
+	case "unchanged":
+		return FilterUnchanged, nil
+	case "increased":
+		return FilterIncreased, nil
+	case "decreased":
+		return FilterDecreased, nil
+	case "value":
+		return FilterValue, nil
+	}
+	return 0, fmt.Errorf("unknown filter mode %q", s)
+}
+
 // parseHexBytes parses "FF 00 AB" or "FF00AB" into bytes.
 func parseHexBytes(s string) ([]byte, error) {
 	s = strings.ReplaceAll(s, " ", "")

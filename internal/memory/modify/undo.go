@@ -7,6 +7,8 @@ import (
 	"memodroid/internal/memory/search"
 )
 
+const maxUndoDepth = 50
+
 type undoEntry struct {
 	drv   driver.Driver
 	pid   int
@@ -15,10 +17,17 @@ type undoEntry struct {
 	vtype search.ValueType
 }
 
-var undoStack []undoEntry
+// UndoStack records previous values so writes can be reverted.
+type UndoStack struct {
+	entries []undoEntry
+}
+
+func NewUndoStack() *UndoStack {
+	return &UndoStack{}
+}
 
 // WithUndo writes value to addr, saving the previous value for Undo.
-func WithUndo(drv driver.Driver, pid int, addr uintptr, value []byte, vt search.ValueType) error {
+func (u *UndoStack) WithUndo(drv driver.Driver, pid int, addr uintptr, value []byte, vt search.ValueType) error {
 	prev, err := drv.Peek(pid, addr, len(value))
 	if err != nil {
 		return err
@@ -26,32 +35,32 @@ func WithUndo(drv driver.Driver, pid int, addr uintptr, value []byte, vt search.
 	if err := drv.Poke(pid, addr, value); err != nil {
 		return err
 	}
-	undoStack = append(undoStack, undoEntry{drv: drv, pid: pid, addr: addr, value: prev, vtype: vt})
-	fmt.Printf("Modified 0x%x (undo available)\n", addr)
+	u.entries = append(u.entries, undoEntry{drv: drv, pid: pid, addr: addr, value: prev, vtype: vt})
+	if len(u.entries) > maxUndoDepth {
+		u.entries = u.entries[len(u.entries)-maxUndoDepth:]
+	}
 	return nil
 }
 
-// Undo reverts the most recent WithUndo.
-func Undo() error {
-	if len(undoStack) == 0 {
-		fmt.Println("Nothing to undo")
-		return nil
+// Undo reverts the most recent WithUndo. Returns an error if the stack is empty.
+func (u *UndoStack) Undo() error {
+	if len(u.entries) == 0 {
+		return fmt.Errorf("nothing to undo")
 	}
-	e := undoStack[len(undoStack)-1]
-	undoStack = undoStack[:len(undoStack)-1]
+	e := u.entries[len(u.entries)-1]
+	u.entries = u.entries[:len(u.entries)-1]
 	if err := e.drv.Poke(e.pid, e.addr, e.value); err != nil {
 		return err
 	}
-	fmt.Printf("Undid 0x%x -> %s\n", e.addr, search.FormatValue(e.value, e.vtype))
 	return nil
 }
 
-// UndoDepth returns how many undo steps are available.
-func UndoDepth() int {
-	return len(undoStack)
+// Depth returns how many undo steps are available.
+func (u *UndoStack) Depth() int {
+	return len(u.entries)
 }
 
-// ClearUndo discards the undo history.
-func ClearUndo() {
-	undoStack = nil
+// Clear discards the undo history.
+func (u *UndoStack) Clear() {
+	u.entries = nil
 }

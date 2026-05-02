@@ -8,7 +8,7 @@
 ## Build & Run
 
 ```bash
-go build -o memodroid .
+go build -o memdroid .
 ./memodroid
 ```
 
@@ -126,9 +126,9 @@ p → Pattern: FF 00 ?? 01
 ### Session save & restore
 
 ```
-28 → Save State → memodroid.json
+28 → Save State → memdroid.json
 --- next session ---
-29 → Load State → memodroid.json
+29 → Load State → memdroid.json
 ```
 
 ## Value Types

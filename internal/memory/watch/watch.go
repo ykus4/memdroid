@@ -9,9 +9,12 @@ import (
 	"memodroid/internal/memory/search"
 )
 
-// BroadcastFunc is called when a watched value changes.
-// Set this to wswatch.Broadcast to push events to the Web UI.
-var BroadcastFunc func(addr uintptr, prev, cur string)
+// ChangeEvent is emitted when a watched value changes.
+type ChangeEvent struct {
+	Addr uintptr
+	Prev string
+	Cur  string
+}
 
 type watchEntry struct {
 	drv   driver.Driver
@@ -22,31 +25,36 @@ type watchEntry struct {
 	stop  chan struct{}
 }
 
-var (
-	mu      sync.Mutex
-	entries = map[uintptr]*watchEntry{}
-)
+// Watcher monitors a set of addresses and fires OnChange when a value changes.
+type Watcher struct {
+	mu       sync.Mutex
+	entries  map[uintptr]*watchEntry
+	OnChange func(ChangeEvent)
+}
 
-// Watch polls addr every interval and prints when the value changes.
-func Watch(drv driver.Driver, pid int, addr uintptr, vt search.ValueType, interval time.Duration) {
-	mu.Lock()
-	defer mu.Unlock()
+func NewWatcher() *Watcher {
+	return &Watcher{entries: make(map[uintptr]*watchEntry)}
+}
 
-	if _, exists := entries[addr]; exists {
-		fmt.Printf("0x%x is already being watched\n", addr)
-		return
+// Watch polls addr every interval and calls OnChange when the value changes.
+// Returns an error if addr is already being watched or initial read fails.
+func (w *Watcher) Watch(drv driver.Driver, pid int, addr uintptr, vt search.ValueType, interval time.Duration) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if _, exists := w.entries[addr]; exists {
+		return fmt.Errorf("0x%x is already being watched", addr)
 	}
 
 	initial, err := drv.Peek(pid, addr, vt.Size())
 	if err != nil {
-		fmt.Printf("Watch failed: %v\n", err)
-		return
+		return fmt.Errorf("watch: initial read failed: %w", err)
 	}
 	last := make([]byte, len(initial))
 	copy(last, initial)
 
 	e := &watchEntry{drv: drv, pid: pid, addr: addr, vtype: vt, last: last, stop: make(chan struct{})}
-	entries[addr] = e
+	w.entries[addr] = e
 
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -59,11 +67,12 @@ func Watch(drv driver.Driver, pid int, addr uintptr, vt search.ValueType, interv
 					continue
 				}
 				if !search.EqualBytes(cur, e.last) {
-					prev := search.FormatValue(e.last, e.vtype)
-					next := search.FormatValue(cur, e.vtype)
-					fmt.Printf("[Watch] 0x%x: %s -> %s\n", e.addr, prev, next)
-					if BroadcastFunc != nil {
-						BroadcastFunc(e.addr, prev, next)
+					if w.OnChange != nil {
+						w.OnChange(ChangeEvent{
+							Addr: e.addr,
+							Prev: search.FormatValue(e.last, e.vtype),
+							Cur:  search.FormatValue(cur, e.vtype),
+						})
 					}
 					copy(e.last, cur)
 				}
@@ -73,42 +82,41 @@ func Watch(drv driver.Driver, pid int, addr uintptr, vt search.ValueType, interv
 		}
 	}()
 
-	fmt.Printf("Watching 0x%x (%s) every %v\n", addr, vt, interval)
+	return nil
 }
 
-// Unwatch stops watching addr.
-func Unwatch(addr uintptr) {
-	mu.Lock()
-	defer mu.Unlock()
+// Unwatch stops watching addr. Returns an error if addr was not watched.
+func (w *Watcher) Unwatch(addr uintptr) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	e, ok := entries[addr]
+	e, ok := w.entries[addr]
 	if !ok {
-		fmt.Printf("0x%x is not being watched\n", addr)
-		return
+		return fmt.Errorf("0x%x is not being watched", addr)
 	}
 	close(e.stop)
-	delete(entries, addr)
-	fmt.Printf("Stopped watching 0x%x\n", addr)
+	delete(w.entries, addr)
+	return nil
 }
 
 // UnwatchAll stops all watchers.
-func UnwatchAll() {
-	mu.Lock()
-	defer mu.Unlock()
+func (w *Watcher) UnwatchAll() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	for addr, e := range entries {
+	for addr, e := range w.entries {
 		close(e.stop)
-		delete(entries, addr)
+		delete(w.entries, addr)
 	}
 }
 
 // List returns all currently watched addresses.
-func List() []uintptr {
-	mu.Lock()
-	defer mu.Unlock()
+func (w *Watcher) List() []uintptr {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	addrs := make([]uintptr, 0, len(entries))
-	for addr := range entries {
+	addrs := make([]uintptr, 0, len(w.entries))
+	for addr := range w.entries {
 		addrs = append(addrs, addr)
 	}
 	return addrs

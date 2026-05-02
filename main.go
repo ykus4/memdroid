@@ -23,7 +23,7 @@ import (
 const (
 	defaultWatchInterval = "500ms"
 	defaultDumpFile      = "dump.hex"
-	defaultStateFile     = "memodroid.json"
+	defaultStateFile     = "memdroid.json"
 	defaultServerAddr    = ":8080"
 	maxCandidatesDisplay = 50
 )
@@ -70,7 +70,7 @@ func requireSession(s *search.Session) bool {
 	return true
 }
 
-// --- device selection ---
+// --- device ---
 
 func handleSelectDevice(d *adb.ADB) {
 	devices, err := d.ListDevices()
@@ -92,7 +92,10 @@ func handleSelectDevice(d *adb.ADB) {
 		return
 	}
 	serial := devices[idx-1]
-	_ = d.SelectDevice(serial)
+	if err := d.SelectDevice(serial); err != nil {
+		fmt.Printf("Select device failed: %v\n", err)
+		return
+	}
 	fmt.Printf("Using device: %s\n", serial)
 }
 
@@ -114,22 +117,30 @@ func handleDisconnectWifi(d *adb.ADB) {
 	fmt.Printf("Disconnected from %s\n", addr)
 }
 
-// --- handlers ---
+// --- attach helpers ---
 
-func handleAttach(st *app.State) {
+func doAttach(st *app.State, pid int, name string) {
 	drv := st.GetDriver()
-	pid, err := strconv.Atoi(prompt("PID: "))
-	if err != nil {
-		fmt.Println("Invalid PID")
-		return
-	}
-	if err := process.Attach(drv, pid); err != nil {
+	if err := drv.Attach(pid); err != nil {
 		fmt.Printf("Attach failed: %v\n", err)
 		return
 	}
 	st.SetPID(pid)
 	st.SetSession(search.NewSession(pid, st.GetValueType(), drv))
-	fmt.Printf("Attached to PID %d\n", pid)
+	if name != "" {
+		fmt.Printf("Attached to %s (PID %d)\n", name, pid)
+	} else {
+		fmt.Printf("Attached to PID %d\n", pid)
+	}
+}
+
+func handleAttach(st *app.State) {
+	pid, err := strconv.Atoi(prompt("PID: "))
+	if err != nil {
+		fmt.Println("Invalid PID")
+		return
+	}
+	doAttach(st, pid, "")
 }
 
 func handleAttachByName(st *app.State, d *adb.ADB) {
@@ -144,15 +155,7 @@ func handleAttachByName(st *app.State, d *adb.ADB) {
 		return
 	}
 	if len(matches) == 1 {
-		pid := matches[0].PID
-		drv := st.GetDriver()
-		if err := process.Attach(drv, pid); err != nil {
-			fmt.Printf("Attach failed: %v\n", err)
-			return
-		}
-		st.SetPID(pid)
-		st.SetSession(search.NewSession(pid, st.GetValueType(), drv))
-		fmt.Printf("Attached to %s (PID %d)\n", matches[0].Name, pid)
+		doAttach(st, matches[0].PID, matches[0].Name)
 		return
 	}
 	for i, p := range matches {
@@ -163,26 +166,17 @@ func handleAttachByName(st *app.State, d *adb.ADB) {
 		fmt.Println("Invalid selection")
 		return
 	}
-	pid := matches[idx-1].PID
-	drv := st.GetDriver()
-	if err := process.Attach(drv, pid); err != nil {
-		fmt.Printf("Attach failed: %v\n", err)
-		return
-	}
-	st.SetPID(pid)
-	st.SetSession(search.NewSession(pid, st.GetValueType(), drv))
-	fmt.Printf("Attached to %s (PID %d)\n", matches[idx-1].Name, pid)
+	doAttach(st, matches[idx-1].PID, matches[idx-1].Name)
 }
 
 func handleDetach(st *app.State) {
-	drv := st.GetDriver()
 	pid := st.GetPID()
 	if !requireAttached(pid) {
 		return
 	}
-	modify.UnfreezeAll()
-	watch.UnwatchAll()
-	process.Detach(drv, pid)
+	st.Freezer.UnfreezeAll()
+	st.Watcher.UnwatchAll()
+	st.GetDriver().Detach(pid)
 	fmt.Printf("Detached from PID %d\n", pid)
 	st.SetPID(0)
 	st.SetSession(nil)
@@ -244,7 +238,9 @@ func handleSearchFiltered(st *app.State) {
 	if !ok {
 		return
 	}
-	st.EnsureSession().SearchFiltered(val, filter, customStart, customEnd)
+	if err := st.EnsureSession().SearchFiltered(val, filter, customStart, customEnd); err != nil {
+		fmt.Printf("Search failed: %v\n", err)
+	}
 }
 
 func handleShowCandidates(st *app.State) {
@@ -280,7 +276,11 @@ func handleWatch(st *app.State) {
 		fmt.Println("Invalid interval")
 		return
 	}
-	watch.Watch(st.GetDriver(), st.GetPID(), addr, st.GetValueType(), interval)
+	if err := st.Watcher.Watch(st.GetDriver(), st.GetPID(), addr, st.GetValueType(), interval); err != nil {
+		fmt.Printf("Watch failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Watching 0x%x (%s) every %v\n", addr, st.GetValueType(), interval)
 }
 
 func handleDump(st *app.State) {
@@ -299,6 +299,8 @@ func handleDump(st *app.State) {
 	}
 	if err := modify.DumpRegion(st.GetDriver(), st.GetPID(), addr, size, path); err != nil {
 		fmt.Printf("Dump failed: %v\n", err)
+	} else {
+		fmt.Printf("Dumped %d bytes from 0x%x to %s\n", size, addr, path)
 	}
 }
 
@@ -352,6 +354,18 @@ func handleShowMaps(st *app.State) {
 	}
 }
 
+func handleBookmarkList(st *app.State) {
+	bl := st.GetBookmarks()
+	if bl.Len() == 0 {
+		fmt.Println("No bookmarks")
+		return
+	}
+	vals := bl.Values(st.GetDriver(), st.GetPID())
+	for i, b := range bl.Entries {
+		fmt.Printf("[%d] 0x%x  %-20s  %s = %s\n", i, b.Addr, b.Label, b.VType, vals[b.Addr])
+	}
+}
+
 // --- main ---
 
 func main() {
@@ -362,14 +376,19 @@ func main() {
 		case 0:
 			fmt.Println("Warning: no ADB devices connected.")
 		case 1:
-			_ = d.SelectDevice(devices[0])
-			fmt.Printf("Auto-selected device: %s\n", devices[0])
+			if err := d.SelectDevice(devices[0]); err == nil {
+				fmt.Printf("Auto-selected device: %s\n", devices[0])
+			}
 		default:
 			handleSelectDevice(d)
 		}
 	}
 
 	st := app.NewState(d)
+
+	st.Watcher.OnChange = func(ev watch.ChangeEvent) {
+		fmt.Printf("[Watch] 0x%x: %s -> %s\n", ev.Addr, ev.Prev, ev.Cur)
+	}
 
 	go func() {
 		if err := server.Start(defaultServerAddr, st, d); err != nil {
@@ -408,13 +427,13 @@ func main() {
 			handleDetach(st)
 		case "4":
 			if requireAttached(pid) {
-				if err := process.Stop(drv, pid); err != nil {
+				if err := drv.Stop(pid); err != nil {
 					fmt.Printf("Stop failed: %v\n", err)
 				}
 			}
 		case "5":
 			if requireAttached(pid) {
-				if err := process.Continue(drv, pid); err != nil {
+				if err := drv.Continue(pid); err != nil {
 					fmt.Printf("Continue failed: %v\n", err)
 				}
 			}
@@ -430,7 +449,11 @@ func main() {
 			if !ok {
 				continue
 			}
-			st.EnsureSession().Search(val)
+			if err := st.EnsureSession().Search(val); err != nil {
+				fmt.Printf("Search failed: %v\n", err)
+				continue
+			}
+			fmt.Printf("Found %d addresses\n", st.GetSession().CandidateCount())
 		case "7r":
 			if !requireAttached(pid) {
 				continue
@@ -444,7 +467,11 @@ func main() {
 				"8": search.FilterChanged, "9": search.FilterUnchanged,
 				"10": search.FilterIncreased, "11": search.FilterDecreased,
 			}
-			sess.Filter(modes[choice], nil)
+			if err := sess.Filter(modes[choice], nil); err != nil {
+				fmt.Printf("Filter failed: %v\n", err)
+				continue
+			}
+			fmt.Printf("Remaining: %d addresses\n", sess.CandidateCount())
 		case "12":
 			if !requireSession(sess) {
 				continue
@@ -453,7 +480,11 @@ func main() {
 			if !ok {
 				continue
 			}
-			sess.Filter(search.FilterValue, val)
+			if err := sess.Filter(search.FilterValue, val); err != nil {
+				fmt.Printf("Filter failed: %v\n", err)
+				continue
+			}
+			fmt.Printf("Remaining: %d addresses\n", sess.CandidateCount())
 		case "13":
 			if requireSession(sess) {
 				handleShowCandidates(st)
@@ -474,15 +505,41 @@ func main() {
 				fmt.Printf("Invalid pattern: %v\n", err)
 				continue
 			}
-			search.SearchPattern(drv, pid, pat)
+			results, err := search.SearchPattern(drv, pid, pat)
+			if err != nil {
+				fmt.Printf("Pattern search failed: %v\n", err)
+				continue
+			}
+			for _, addr := range results {
+				fmt.Printf("  Found at 0x%x\n", addr)
+			}
+			fmt.Printf("Total: %d results\n", len(results))
 		case "s8":
-			if requireAttached(pid) {
-				search.SearchStringUTF8(drv, pid, prompt("String (UTF-8): "))
+			if !requireAttached(pid) {
+				continue
 			}
+			results, err := search.SearchStringUTF8(drv, pid, prompt("String (UTF-8): "))
+			if err != nil {
+				fmt.Printf("Search failed: %v\n", err)
+				continue
+			}
+			for _, addr := range results {
+				fmt.Printf("  Found at 0x%x\n", addr)
+			}
+			fmt.Printf("Total: %d results\n", len(results))
 		case "s16":
-			if requireAttached(pid) {
-				search.SearchStringUTF16(drv, pid, prompt("String (UTF-16LE): "))
+			if !requireAttached(pid) {
+				continue
 			}
+			results, err := search.SearchStringUTF16(drv, pid, prompt("String (UTF-16LE): "))
+			if err != nil {
+				fmt.Printf("Search failed: %v\n", err)
+				continue
+			}
+			for _, addr := range results {
+				fmt.Printf("  Found at 0x%x\n", addr)
+			}
+			fmt.Printf("Total: %d results\n", len(results))
 		case "sw":
 			if !requireAttached(pid) {
 				continue
@@ -510,12 +567,16 @@ func main() {
 			if !ok {
 				continue
 			}
-			if err := modify.WithUndo(drv, pid, addr, val, vt); err != nil {
+			if err := st.UndoStack.WithUndo(drv, pid, addr, val, vt); err != nil {
 				fmt.Printf("Modify failed: %v\n", err)
+			} else {
+				fmt.Printf("Modified 0x%x (undo available, depth: %d)\n", addr, st.UndoStack.Depth())
 			}
 		case "16":
-			if err := modify.Undo(); err != nil {
-				fmt.Printf("Undo failed: %v\n", err)
+			if err := st.UndoStack.Undo(); err != nil {
+				fmt.Printf("Undo: %v\n", err)
+			} else {
+				fmt.Printf("Undone (remaining depth: %d)\n", st.UndoStack.Depth())
 			}
 		case "17":
 			if !requireAttached(pid) {
@@ -529,17 +590,26 @@ func main() {
 			if !ok {
 				continue
 			}
-			modify.Freeze(drv, pid, addr, val)
+			if err := st.Freezer.Freeze(drv, pid, addr, val); err != nil {
+				fmt.Printf("Freeze failed: %v\n", err)
+			} else {
+				fmt.Printf("Freezing 0x%x\n", addr)
+			}
 		case "17a":
 			if requireSession(sess) {
-				modify.FreezeAllCandidates(drv, sess)
+				count := st.Freezer.FreezeAllCandidates(drv, sess)
+				fmt.Printf("Freezing %d addresses\n", count)
 			}
 		case "18":
 			if addr, ok := parseAddr("Address (hex): "); ok {
-				modify.Unfreeze(addr)
+				if err := st.Freezer.Unfreeze(addr); err != nil {
+					fmt.Printf("Unfreeze: %v\n", err)
+				} else {
+					fmt.Printf("Unfrozen 0x%x\n", addr)
+				}
 			}
 		case "19":
-			addrs := modify.FrozenList()
+			addrs := st.Freezer.List()
 			if len(addrs) == 0 {
 				fmt.Println("No frozen addresses")
 				continue
@@ -553,10 +623,14 @@ func main() {
 			}
 		case "21":
 			if addr, ok := parseAddr("Address (hex): "); ok {
-				watch.Unwatch(addr)
+				if err := st.Watcher.Unwatch(addr); err != nil {
+					fmt.Printf("Unwatch: %v\n", err)
+				} else {
+					fmt.Printf("Stopped watching 0x%x\n", addr)
+				}
 			}
 		case "22":
-			addrs := watch.List()
+			addrs := st.Watcher.List()
 			if len(addrs) == 0 {
 				fmt.Println("No watched addresses")
 				continue
@@ -589,8 +663,9 @@ func main() {
 				continue
 			}
 			st.GetBookmarks().Add(addr, prompt("Label: "), vt)
+			fmt.Printf("Bookmarked 0x%x\n", addr)
 		case "25":
-			st.GetBookmarks().List(drv, pid)
+			handleBookmarkList(st)
 		case "26":
 			if !requireAttached(pid) {
 				continue
@@ -599,15 +674,18 @@ func main() {
 			if !ok {
 				continue
 			}
-			st.GetBookmarks().ModifyAll(drv, pid, val, vt)
+			count := st.GetBookmarks().ModifyAll(drv, pid, val, vt)
+			fmt.Printf("Modified %d bookmarks\n", count)
 		case "27":
-			st.GetBookmarks().List(drv, pid)
+			handleBookmarkList(st)
 			idx, err := strconv.Atoi(prompt("Index to remove: "))
 			if err != nil {
 				fmt.Println("Invalid index")
 				continue
 			}
-			st.GetBookmarks().Remove(idx)
+			if err := st.GetBookmarks().Remove(idx); err != nil {
+				fmt.Printf("Remove: %v\n", err)
+			}
 
 		// --- Session ---
 		case "28":
@@ -629,14 +707,18 @@ func main() {
 			if err := store.LoadState(path, st.GetBookmarks(), &loaded); err != nil {
 				fmt.Printf("Load failed: %v\n", err)
 			} else {
+				if loaded != nil {
+					loaded.Driver = st.GetDriver()
+				}
 				st.SetSession(loaded)
+				fmt.Printf("Loaded from %s\n", path)
 			}
 
 		case "0":
-			modify.UnfreezeAll()
-			watch.UnwatchAll()
+			st.Freezer.UnfreezeAll()
+			st.Watcher.UnwatchAll()
 			if pid != 0 {
-				process.Detach(drv, pid)
+				drv.Detach(pid)
 			}
 			fmt.Println("Bye!")
 			os.Exit(0)
@@ -663,8 +745,8 @@ func printMenu(st *app.State, d *adb.ADB) {
 		if sess != nil && sess.HasCandidates() {
 			fmt.Printf("  Candidates: %d", sess.CandidateCount())
 		}
-		if modify.UndoDepth() > 0 {
-			fmt.Printf("  Undo: %d", modify.UndoDepth())
+		if st.UndoStack.Depth() > 0 {
+			fmt.Printf("  Undo: %d", st.UndoStack.Depth())
 		}
 		fmt.Println()
 	}

@@ -19,12 +19,9 @@ const (
 
 // Filter narrows the candidate list by re-reading current values and applying mode.
 // For FilterValue, pass the target bytes; otherwise target may be nil.
-// Candidates are batched by region so we do one ReadRegion call per region
-// instead of one Peek call per candidate address.
-func (s *Session) Filter(mode FilterMode, target []byte) {
+func (s *Session) Filter(mode FilterMode, target []byte) error {
 	if !s.HasCandidates() {
-		fmt.Println("No active search session. Run Search first.")
-		return
+		return fmt.Errorf("no active search session")
 	}
 
 	fixedSize := s.ValueType.Size()
@@ -34,18 +31,15 @@ func (s *Session) Filter(mode FilterMode, target []byte) {
 
 	regions, err := s.Driver.ReadMaps(s.PID)
 	if err != nil {
-		fmt.Printf("Filter: read maps: %v\n", err)
-		return
+		return fmt.Errorf("filter: read maps: %w", err)
 	}
 
-	// Build region cache: read each region that contains at least one candidate.
 	type regionData struct {
 		start uintptr
 		buf   []byte
 	}
-	cache := make(map[int]*regionData) // region index → data
+	cache := make(map[int]*regionData)
 
-	// Collect sorted candidate addresses so we can binary-search region membership.
 	type candEntry struct {
 		addr uintptr
 		prev []byte
@@ -98,7 +92,6 @@ func (s *Session) Filter(mode FilterMode, target []byte) {
 			}
 		}
 		if cur == nil {
-			// Fall back to single Peek (e.g. unmapped in cached maps snapshot).
 			cur, err = s.Driver.Peek(s.PID, e.addr, sz)
 			if err != nil {
 				continue
@@ -127,5 +120,5 @@ func (s *Session) Filter(mode FilterMode, target []byte) {
 	}
 
 	s.Candidates = next
-	fmt.Printf("Remaining: %d addresses\n", len(next))
+	return nil
 }
