@@ -373,7 +373,7 @@ func main() {
 
 	go func() {
 		if err := server.Start(defaultServerAddr, st, d); err != nil {
-			fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
+			_, _ = fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
 		}
 	}()
 
