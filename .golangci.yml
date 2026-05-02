@@ -5,10 +5,9 @@ linters:
     - govet
     - errcheck
     - staticcheck
-
-linters-settings:
-  goimports:
-    local-prefixes: memodroid
+  settings:
+    goimports:
+      local-prefixes: memodroid
 
 issues:
   exclude-rules:
