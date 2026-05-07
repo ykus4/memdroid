@@ -3,6 +3,7 @@ package search
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"memodroid/internal/driver"
 )
@@ -38,8 +39,8 @@ func (s *Session) Filter(mode FilterMode, target []byte) error {
 		start uintptr
 		buf   []byte
 	}
-	cache := make(map[int]*regionData)
 
+	// Determine which regions contain candidates so we only read those.
 	type candEntry struct {
 		addr uintptr
 		prev []byte
@@ -59,19 +60,39 @@ func (s *Session) Filter(mode FilterMode, target []byte) error {
 		return -1, nil
 	}
 
-	readRegion := func(idx int, r *driver.Region) *regionData {
-		if d, ok := cache[idx]; ok {
-			return d
+	// Identify needed regions.
+	needed := make(map[int]struct{})
+	for _, e := range entries {
+		if idx, _ := regionFor(e.addr); idx >= 0 {
+			needed[idx] = struct{}{}
 		}
-		buf, err := s.Driver.ReadRegion(s.PID, r.Start, int(r.End-r.Start))
-		if err != nil {
-			cache[idx] = nil
-			return nil
-		}
-		d := &regionData{start: r.Start, buf: buf}
-		cache[idx] = d
-		return d
 	}
+
+	// Pre-load needed regions in parallel.
+	cache := make(map[int]*regionData)
+	var cacheMu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, scanWorkers)
+
+	for idx := range needed {
+		idx := idx
+		r := &regions[idx]
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			buf, readErr := s.Driver.ReadRegion(s.PID, r.Start, int(r.End-r.Start))
+			cacheMu.Lock()
+			if readErr != nil {
+				cache[idx] = nil
+			} else {
+				cache[idx] = &regionData{start: r.Start, buf: buf}
+			}
+			cacheMu.Unlock()
+		}()
+	}
+	wg.Wait()
 
 	next := make(map[uintptr][]byte)
 	for _, e := range entries {
@@ -80,11 +101,10 @@ func (s *Session) Filter(mode FilterMode, target []byte) error {
 			sz = len(e.prev)
 		}
 
-		idx, r := regionFor(e.addr)
+		idx, _ := regionFor(e.addr)
 		var cur []byte
 		if idx >= 0 {
-			d := readRegion(idx, r)
-			if d != nil {
+			if d := cache[idx]; d != nil {
 				off := int(e.addr - d.start)
 				if off >= 0 && off+sz <= len(d.buf) {
 					cur = d.buf[off : off+sz]
