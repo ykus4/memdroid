@@ -66,6 +66,7 @@ func handleDetach(st *app.State) {
 	}
 	st.Freezer.UnfreezeAll()
 	st.Watcher.UnwatchAll()
+	st.AlertWatcher.RemoveAll()
 	st.GetDriver().Detach(pid)
 	fmt.Printf("Detached from PID %d\n", pid)
 	st.SetPID(0)

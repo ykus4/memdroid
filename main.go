@@ -45,6 +45,14 @@ func main() {
 		fmt.Printf("[Watch] 0x%x: %s -> %s\n", ev.Addr, ev.Prev, ev.Cur)
 	}
 
+	st.AlertWatcher.OnAlert = func(ev watch.AlertEvent) {
+		action := "notify"
+		if ev.Triggered {
+			action = "WRITE"
+		}
+		fmt.Printf("[Alert] 0x%x: condition=%s value=%s action=%s\n", ev.Addr, ev.Condition, ev.Value, action)
+	}
+
 	go func() {
 		if err := server.Start(defaultServerAddr, st, d); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
@@ -295,6 +303,12 @@ func main() {
 			for _, addr := range addrs {
 				fmt.Printf("  0x%x\n", addr)
 			}
+		case "22a":
+			if requireAttached(pid) {
+				handleSetAlert(st)
+			}
+		case "22r":
+			handleRemoveAlert(st)
 		case "23":
 			if requireAttached(pid) {
 				handleDump(st)
@@ -450,6 +464,8 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 20. Watch Address")
 	fmt.Println(" 21. Unwatch Address")
 	fmt.Println(" 22. List Watched")
+	fmt.Println("22a. Set Alert (conditional watch)")
+	fmt.Println("22r. Remove Alert")
 	fmt.Println(" 23. Dump Memory Region")
 	fmt.Println("23d. Snapshot Diff")
 	fmt.Println("23m. Show Memory Maps")

@@ -8,6 +8,8 @@ import (
 	"memodroid/internal/app"
 	"memodroid/internal/memory/modify"
 	"memodroid/internal/memory/pointer"
+	"memodroid/internal/memory/search"
+	"memodroid/internal/memory/watch"
 )
 
 func handleSetFreezeInterval(st *app.State) {
@@ -184,3 +186,68 @@ func handleBookmarkList(st *app.State) {
 		fmt.Printf("[%d] 0x%x  %-20s  %s = %s\n", i, b.Addr, b.Label, b.VType, vals[b.Addr])
 	}
 }
+
+func handleSetAlert(st *app.State) {
+	addr, ok := parseAddr("Address (hex): ")
+	if !ok {
+		return
+	}
+	fmt.Println("Condition: above, below, changed")
+	cond, err := watch.ParseAlertCondition(prompt("Condition: "))
+	if err != nil {
+		fmt.Printf("%v\n", err)
+		return
+	}
+	vt := st.GetValueType()
+	cfg := watch.AlertConfig{
+		Addr:      addr,
+		Condition: cond,
+		Action:    watch.ActionNotify,
+	}
+	if cond != watch.AlertChanged {
+		threshold, ok := parseValue("Threshold value: ", vt)
+		if !ok {
+			return
+		}
+		cfg.Threshold = threshold
+	}
+	action := prompt("Action (notify / write) [default: notify]: ")
+	if action == "write" {
+		cfg.Action = watch.ActionWrite
+		writeVal, ok := parseValue("Value to write when triggered: ", vt)
+		if !ok {
+			return
+		}
+		cfg.WriteVal = writeVal
+	}
+	intervalStr := prompt("Poll interval [default: 500ms]: ")
+	if intervalStr == "" {
+		intervalStr = "500ms"
+	}
+	interval, err := time.ParseDuration(intervalStr)
+	if err != nil {
+		fmt.Println("Invalid interval")
+		return
+	}
+	if err := st.AlertWatcher.WatchWithAlert(st.GetDriver(), st.GetPID(), vt, cfg, interval); err != nil {
+		fmt.Printf("Alert failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Alert set on 0x%x: condition=%s action=%s\n", addr, cond, action)
+}
+
+func handleRemoveAlert(st *app.State) {
+	addr, ok := parseAddr("Address (hex): ")
+	if !ok {
+		return
+	}
+	if err := st.AlertWatcher.RemoveAlert(addr); err != nil {
+		fmt.Printf("Remove alert: %v\n", err)
+	} else {
+		fmt.Printf("Alert removed for 0x%x\n", addr)
+	}
+}
+
+// suppress unused import warnings
+var _ = search.TypeInt32
+var _ = watch.AlertChanged

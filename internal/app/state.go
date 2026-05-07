@@ -21,20 +21,22 @@ type State struct {
 	bookmarks *store.BookmarkList
 	snapshots map[uintptr][]byte
 
-	Freezer   *modify.Freezer
-	UndoStack *modify.UndoStack
-	Watcher   *watch.Watcher
+	Freezer      *modify.Freezer
+	UndoStack    *modify.UndoStack
+	Watcher      *watch.Watcher
+	AlertWatcher *watch.AlertWatcher
 }
 
 func NewState(drv driver.Driver) *State {
 	return &State{
-		drv:       drv,
-		valueType: search.TypeInt32,
-		bookmarks: store.NewBookmarkList(),
-		snapshots: make(map[uintptr][]byte),
-		Freezer:   modify.NewFreezer(),
-		UndoStack: modify.NewUndoStack(),
-		Watcher:   watch.NewWatcher(),
+		drv:          drv,
+		valueType:    search.TypeInt32,
+		bookmarks:    store.NewBookmarkList(),
+		snapshots:    make(map[uintptr][]byte),
+		Freezer:      modify.NewFreezer(),
+		UndoStack:    modify.NewUndoStack(),
+		Watcher:      watch.NewWatcher(),
+		AlertWatcher: watch.NewAlertWatcher(),
 	}
 }
 
