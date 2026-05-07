@@ -45,6 +45,14 @@ func main() {
 		fmt.Printf("[Watch] 0x%x: %s -> %s\n", ev.Addr, ev.Prev, ev.Cur)
 	}
 
+	st.AlertWatcher.OnAlert = func(ev watch.AlertEvent) {
+		action := "notify"
+		if ev.Triggered {
+			action = "WRITE"
+		}
+		fmt.Printf("[Alert] 0x%x: condition=%s value=%s action=%s\n", ev.Addr, ev.Condition, ev.Value, action)
+	}
+
 	go func() {
 		if err := server.Start(defaultServerAddr, st, d); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
@@ -80,6 +88,10 @@ func main() {
 			handleAttach(st)
 		case "3":
 			handleDetach(st)
+		case "3s":
+			handleSwitchProcess(st)
+		case "3l":
+			handleListAttached(st)
 		case "4":
 			if requireAttached(pid) {
 				if err := drv.Stop(pid); err != nil {
@@ -251,21 +263,7 @@ func main() {
 				fmt.Printf("Freezing 0x%x\n", addr)
 			}
 		case "17i":
-			s := prompt(fmt.Sprintf("Freeze interval [current: %v]: ", st.Freezer.GetInterval()))
-			if s == "" {
-				continue
-			}
-			d, err := time.ParseDuration(s)
-			if err != nil {
-				fmt.Println("Invalid duration (e.g. 50ms, 200ms, 1s)")
-				continue
-			}
-			if d <= 0 {
-				fmt.Println("Interval must be positive")
-				continue
-			}
-			st.Freezer.SetInterval(d)
-			fmt.Printf("Freeze interval set to %v\n", d)
+			handleSetFreezeInterval(st)
 		case "17a":
 			if requireSession(sess) {
 				count := st.Freezer.FreezeAllCandidates(drv, sess)
@@ -309,9 +307,19 @@ func main() {
 			for _, addr := range addrs {
 				fmt.Printf("  0x%x\n", addr)
 			}
+		case "22a":
+			if requireAttached(pid) {
+				handleSetAlert(st)
+			}
+		case "22r":
+			handleRemoveAlert(st)
 		case "23":
 			if requireAttached(pid) {
 				handleDump(st)
+			}
+		case "23d":
+			if requireAttached(pid) {
+				handleSnapshotDiff(st)
 			}
 		case "23m":
 			if requireAttached(pid) {
@@ -322,6 +330,10 @@ func main() {
 		case "pt":
 			if requireAttached(pid) {
 				handlePointerScan(st)
+			}
+		case "pr":
+			if requireAttached(pid) {
+				handlePointerResolve(st)
 			}
 
 		// --- Bookmarks ---
@@ -357,6 +369,10 @@ func main() {
 			if err := st.GetBookmarks().Remove(idx); err != nil {
 				fmt.Printf("Remove: %v\n", err)
 			}
+
+		// --- Import ---
+		case "ct":
+			handleImportCT(st)
 
 		// --- Session ---
 		case "28":
@@ -431,6 +447,8 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 1s. Attach by Name")
 	fmt.Println("  2. Attach by PID")
 	fmt.Println("  3. Detach")
+	fmt.Println(" 3s. Switch Active Process")
+	fmt.Println(" 3l. List Attached Processes")
 	fmt.Println("  4. Stop Process")
 	fmt.Println("  5. Continue Process")
 	fmt.Println("--- Search ---")
@@ -460,10 +478,16 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 20. Watch Address")
 	fmt.Println(" 21. Unwatch Address")
 	fmt.Println(" 22. List Watched")
+	fmt.Println("22a. Set Alert (conditional watch)")
+	fmt.Println("22r. Remove Alert")
 	fmt.Println(" 23. Dump Memory Region")
+	fmt.Println("23d. Snapshot Diff")
 	fmt.Println("23m. Show Memory Maps")
 	fmt.Println("--- Pointer ---")
 	fmt.Println(" pt. Pointer Scan")
+	fmt.Println(" pr. Resolve Pointer Chain")
+	fmt.Println("--- Import ---")
+	fmt.Println(" ct. Import CheatEngine .CT file")
 	fmt.Println("--- Bookmarks ---")
 	fmt.Println(" 24. Add Bookmark")
 	fmt.Println(" 25. List Bookmarks")

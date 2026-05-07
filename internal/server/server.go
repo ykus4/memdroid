@@ -71,6 +71,7 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 
 	// Pointer scan
 	mux.HandleFunc("/api/pointer/scan", h.pointerScan)
+	mux.HandleFunc("/api/pointer/resolve", h.pointerResolve)
 
 	// Memory
 	mux.HandleFunc("/api/memory/modify", h.memoryModify)
@@ -80,12 +81,20 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 	mux.HandleFunc("/api/memory/freeze-all", h.memoryFreezeAll)
 	mux.HandleFunc("/api/memory/unfreeze", h.memoryUnfreeze)
 	mux.HandleFunc("/api/memory/frozen", h.memoryFrozen)
+	mux.HandleFunc("/api/memory/hexdump", h.memoryHexdump)
+
+	// Snapshot
+	mux.HandleFunc("/api/snapshot/take", h.snapshotTake)
+	mux.HandleFunc("/api/snapshot/diff", h.snapshotDiff)
 
 	// Bookmarks
 	mux.HandleFunc("/api/bookmark/list", h.bookmarkList)
 	mux.HandleFunc("/api/bookmark/add", h.bookmarkAdd)
 	mux.HandleFunc("/api/bookmark/remove", h.bookmarkRemove)
 	mux.HandleFunc("/api/bookmark/modify-all", h.bookmarkModifyAll)
+
+	// Import
+	mux.HandleFunc("/api/import/ct", h.importCT)
 
 	// Session
 	mux.HandleFunc("/api/session/save", h.sessionSave)

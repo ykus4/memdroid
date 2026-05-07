@@ -489,6 +489,42 @@ func (h *handler) pointerScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"target": fmt.Sprintf("0x%x", addr), "chains": out})
 }
 
+// --- pointer resolve ---
+
+func (h *handler) pointerResolve(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	_ = pid
+	var req struct {
+		Label   string  `json:"label"`
+		Offsets []int64 `json:"offsets"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if req.Label == "" || len(req.Offsets) == 0 {
+		writeError(w, 400, "label and offsets required")
+		return
+	}
+	chain := pointer.Chain{
+		BaseLabel: req.Label,
+		Offsets:   req.Offsets,
+	}
+	resolved, err := pointer.ResolveChain(h.state.GetDriver(), h.state.GetPID(), chain)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{
+		"resolved": fmt.Sprintf("0x%x", resolved),
+		"label":    req.Label,
+		"offsets":  req.Offsets,
+	})
+}
+
 // --- memory ---
 
 func (h *handler) memoryModify(w http.ResponseWriter, r *http.Request) {
@@ -615,6 +651,178 @@ func (h *handler) memoryFrozen(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, out)
 }
 
+// --- hexdump ---
+
+func (h *handler) memoryHexdump(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	addrStr := r.URL.Query().Get("addr")
+	sizeStr := r.URL.Query().Get("size")
+	if addrStr == "" || sizeStr == "" {
+		writeError(w, 400, "addr and size required")
+		return
+	}
+	addr, err := parseHexAddr(addrStr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil || size <= 0 || size > 4096 {
+		writeError(w, 400, "size must be 1-4096")
+		return
+	}
+	data, err := h.state.GetDriver().ReadRegion(pid, addr, size)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	type hexLine struct {
+		Offset int    `json:"offset"`
+		Hex    string `json:"hex"`
+		ASCII  string `json:"ascii"`
+	}
+	var lines []hexLine
+	for i := 0; i < len(data); i += 16 {
+		end := i + 16
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := data[i:end]
+
+		// Build hex string
+		hexParts := make([]string, len(chunk))
+		for j, b := range chunk {
+			hexParts[j] = fmt.Sprintf("%02x", b)
+		}
+		hexStr := ""
+		for j, p := range hexParts {
+			if j > 0 {
+				hexStr += " "
+			}
+			hexStr += p
+		}
+
+		// Build ASCII string
+		ascii := make([]byte, len(chunk))
+		for j, b := range chunk {
+			if b >= 0x20 && b <= 0x7e {
+				ascii[j] = b
+			} else {
+				ascii[j] = '.'
+			}
+		}
+
+		lines = append(lines, hexLine{
+			Offset: i,
+			Hex:    hexStr,
+			ASCII:  string(ascii),
+		})
+	}
+	writeJSON(w, map[string]any{
+		"addr":      fmt.Sprintf("0x%x", addr),
+		"hex_lines": lines,
+	})
+}
+
+// --- snapshot ---
+
+func (h *handler) snapshotTake(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	var req struct {
+		Addr string `json:"addr"`
+		Size int    `json:"size"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	addr, err := parseHexAddr(req.Addr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	if req.Size <= 0 {
+		writeError(w, 400, "size must be positive")
+		return
+	}
+	drv := h.state.GetDriver()
+	data, readErr := drv.ReadRegion(pid, addr, req.Size)
+	if readErr != nil {
+		writeError(w, 500, readErr.Error())
+		return
+	}
+	// Store snapshot in state for later diff
+	h.state.SetSnapshot(addr, data)
+	writeJSON(w, map[string]any{"ok": true, "addr": fmt.Sprintf("0x%x", addr), "size": len(data)})
+}
+
+func (h *handler) snapshotDiff(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	_ = pid
+	var req struct {
+		Addr string `json:"addr"`
+		Size int    `json:"size"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	addr, err := parseHexAddr(req.Addr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	if req.Size <= 0 {
+		writeError(w, 400, "size must be positive")
+		return
+	}
+	prev := h.state.GetSnapshot(addr)
+	if prev == nil {
+		writeError(w, 400, "no snapshot taken for this address — call /api/snapshot/take first")
+		return
+	}
+	drv := h.state.GetDriver()
+	cur, readErr := drv.ReadRegion(h.state.GetPID(), addr, req.Size)
+	if readErr != nil {
+		writeError(w, 500, readErr.Error())
+		return
+	}
+	minLen := len(prev)
+	if len(cur) < minLen {
+		minLen = len(cur)
+	}
+	type diffEntry struct {
+		Addr   string `json:"addr"`
+		Offset int    `json:"offset"`
+		Before int    `json:"before"`
+		After  int    `json:"after"`
+	}
+	var diffs []diffEntry
+	for i := 0; i < minLen; i++ {
+		if prev[i] != cur[i] {
+			diffs = append(diffs, diffEntry{
+				Addr:   fmt.Sprintf("0x%x", addr+uintptr(i)),
+				Offset: i,
+				Before: int(prev[i]),
+				After:  int(cur[i]),
+			})
+		}
+	}
+	// Update stored snapshot to current
+	h.state.SetSnapshot(addr, cur)
+	writeJSON(w, map[string]any{"total": len(diffs), "diffs": diffs})
+}
+
 // --- bookmarks ---
 
 func (h *handler) bookmarkList(w http.ResponseWriter, _ *http.Request) {
@@ -696,6 +904,28 @@ func (h *handler) bookmarkModifyAll(w http.ResponseWriter, r *http.Request) {
 	}
 	count := h.state.GetBookmarks().ModifyAll(h.state.GetDriver(), pid, val, vt)
 	writeJSON(w, map[string]any{"ok": true, "count": count})
+}
+
+// --- import ---
+
+func (h *handler) importCT(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := decode(r, &req); err != nil || req.Path == "" {
+		writeError(w, 400, "path required")
+		return
+	}
+	bookmarks, err := store.ImportCT(req.Path)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	bl := h.state.GetBookmarks()
+	for _, b := range bookmarks {
+		bl.Add(b.Addr, b.Label, b.VType)
+	}
+	writeJSON(w, map[string]any{"ok": true, "imported": len(bookmarks)})
 }
 
 // --- session ---
