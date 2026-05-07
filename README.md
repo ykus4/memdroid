@@ -88,17 +88,19 @@ pt  Pointer Scan       →  find stable address for next session
 | Category | Feature |
 |----------|---------|
 | **Device** | USB device selection, Wi-Fi ADB connect/disconnect |
-| **Process** | List, search by name, attach, detach, stop, continue |
-| **Search** | Exact value — `int32/64` `uint32/64` `float32/64` `bytes` |
+| **Process** | List, search by name, multi-attach, switch active process |
+| **Search** | Exact value — `int32/64` `uint32/64` `float32/64` `bytes`, parallel scanning |
 | **Pattern** | Byte pattern with `??` wildcard (e.g. `FF 00 ?? 01`) |
 | **String** | UTF-8 and UTF-16LE string search & in-place edit |
 | **Filter** | Changed / Unchanged / Increased / Decreased / Exact value |
-| **Pointer Scan** | Find stable pointer chains across process restarts |
-| **Modify** | Write value with Undo, Freeze (100 ms loop), Dump to file |
+| **Pointer Scan** | Find stable pointer chains, auto-resolve after ASLR rebasing |
+| **Modify** | Write value with Undo, Freeze (configurable interval), Dump to file |
+| **Snapshot Diff** | Compare two memory snapshots to find changed bytes |
 | **Watch** | Real-time value change monitor — streamed to Web UI via WebSocket |
-| **Bookmarks** | Named addresses, bulk modify |
+| **Alerts** | Conditional watch — auto-write or notify when value crosses threshold |
+| **Bookmarks** | Named addresses, bulk modify, CheatEngine .CT import |
 | **Session** | Save / load state (bookmarks + candidates) as JSON |
-| **Web UI** | Full feature parity with CLI at `http://localhost:8080` |
+| **Web UI** | Hex viewer, paginated candidates, pointer tree view at `http://localhost:8080` |
 
 ---
 
