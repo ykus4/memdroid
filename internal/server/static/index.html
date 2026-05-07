@@ -359,11 +359,21 @@ tbody tr:hover td{background:var(--bg3)}
       <div class="row" style="margin-bottom:0">
         <button class="btn" onclick="loadCandidates()">↺ Refresh</button>
         <button class="btn success" onclick="freezeAll()">❄ Freeze All</button>
+        <select id="cand-pagesize" onchange="loadCandidates(0)" style="flex:0 0 auto;margin-left:auto">
+          <option value="50">50 / page</option>
+          <option value="100" selected>100 / page</option>
+          <option value="250">250 / page</option>
+        </select>
       </div>
     </div>
     <div class="table-wrap">
       <table><thead><tr><th>Address</th><th>Value</th><th style="width:180px"></th></tr></thead>
       <tbody id="cand-table"><tr><td class="empty" colspan="3">No candidates</td></tr></tbody></table>
+    </div>
+    <div class="row" id="cand-pagination" style="margin-top:8px;display:none">
+      <button class="btn sm" id="cand-prev" onclick="candPage(-1)">← Prev</button>
+      <span id="cand-pageinfo" style="color:var(--text2);font-size:12px;padding:0 8px"></span>
+      <button class="btn sm" id="cand-next" onclick="candPage(1)">Next →</button>
     </div>
   </div>
 
@@ -703,12 +713,21 @@ async function searchString() {
 }
 
 // ── Candidates ───────────────────────────────────────
-async function loadCandidates() {
-  const list = await api('/search/candidates');
-  document.getElementById('cand-count').textContent = list.length;
+let candCurrentPage = 0;
+async function loadCandidates(page) {
+  if (page !== undefined) candCurrentPage = page;
+  const ps = document.getElementById('cand-pagesize').value;
+  const res = await api(`/search/candidates?page=${candCurrentPage}&page_size=${ps}`);
+  if (res.error) { log(res.error, false); return; }
+
+  document.getElementById('cand-count').textContent = res.total;
   const tb = document.getElementById('cand-table');
-  if (!list.length) { tb.innerHTML = '<tr><td class="empty" colspan="3">No candidates</td></tr>'; return; }
-  tb.innerHTML = list.map(c =>
+  if (!res.items || !res.items.length) {
+    tb.innerHTML = '<tr><td class="empty" colspan="3">No candidates</td></tr>';
+    document.getElementById('cand-pagination').style.display = 'none';
+    return;
+  }
+  tb.innerHTML = res.items.map(c =>
     `<tr>
       <td class="addr">${escHtml(c.addr)}</td>
       <td class="val">${escHtml(c.value)}</td>
@@ -719,6 +738,20 @@ async function loadCandidates() {
       </td>
     </tr>`
   ).join('');
+
+  const totalPages = Math.ceil(res.total / parseInt(ps));
+  document.getElementById('cand-pageinfo').textContent = `Page ${candCurrentPage + 1} / ${totalPages} (${res.total} total)`;
+  document.getElementById('cand-pagination').style.display = res.total > parseInt(ps) ? '' : 'none';
+  document.getElementById('cand-prev').disabled = candCurrentPage === 0;
+  document.getElementById('cand-next').disabled = candCurrentPage >= totalPages - 1;
+}
+function candPage(delta) {
+  const ps = parseInt(document.getElementById('cand-pagesize').value);
+  const total = parseInt(document.getElementById('cand-count').textContent);
+  const totalPages = Math.ceil(total / ps);
+  const next = candCurrentPage + delta;
+  if (next < 0 || next >= totalPages) return;
+  loadCandidates(next);
 }
 function prefillModify(addr, val) {
   document.querySelector('[data-panel="memory"]').click();
