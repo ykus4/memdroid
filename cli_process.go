@@ -16,6 +16,7 @@ func doAttach(st *app.State, pid int, name string) {
 		return
 	}
 	st.SetPID(pid)
+	st.AddAttached(pid, name)
 	st.SetSession(search.NewSession(pid, st.GetValueType(), drv))
 	if name != "" {
 		fmt.Printf("Attached to %s (PID %d)\n", name, pid)
@@ -68,7 +69,67 @@ func handleDetach(st *app.State) {
 	st.Watcher.UnwatchAll()
 	st.AlertWatcher.RemoveAll()
 	st.GetDriver().Detach(pid)
+	st.RemoveAttached(pid)
 	fmt.Printf("Detached from PID %d\n", pid)
-	st.SetPID(0)
-	st.SetSession(nil)
+	// Switch to another attached process if available
+	remaining := st.ListAttached()
+	if len(remaining) > 0 {
+		next := remaining[0]
+		st.SetPID(next.PID)
+		st.SetSession(search.NewSession(next.PID, st.GetValueType(), st.GetDriver()))
+		fmt.Printf("Switched to PID %d (%s)\n", next.PID, next.Name)
+	} else {
+		st.SetPID(0)
+		st.SetSession(nil)
+	}
+}
+
+func handleSwitchProcess(st *app.State) {
+	procs := st.ListAttached()
+	if len(procs) == 0 {
+		fmt.Println("No attached processes")
+		return
+	}
+	current := st.GetPID()
+	fmt.Println("Attached processes:")
+	for i, p := range procs {
+		marker := "  "
+		if p.PID == current {
+			marker = "* "
+		}
+		name := p.Name
+		if name == "" {
+			name = "(unknown)"
+		}
+		fmt.Printf("  %s%d. [%d] %s\n", marker, i+1, p.PID, name)
+	}
+	idx, err := strconv.Atoi(prompt("Switch to: "))
+	if err != nil || idx < 1 || idx > len(procs) {
+		fmt.Println("Invalid selection")
+		return
+	}
+	target := procs[idx-1]
+	st.SetPID(target.PID)
+	st.SetSession(search.NewSession(target.PID, st.GetValueType(), st.GetDriver()))
+	fmt.Printf("Active process: PID %d (%s)\n", target.PID, target.Name)
+}
+
+func handleListAttached(st *app.State) {
+	procs := st.ListAttached()
+	if len(procs) == 0 {
+		fmt.Println("No attached processes")
+		return
+	}
+	current := st.GetPID()
+	for _, p := range procs {
+		marker := "  "
+		if p.PID == current {
+			marker = "* "
+		}
+		name := p.Name
+		if name == "" {
+			name = "(unknown)"
+		}
+		fmt.Printf("  %s[%d] %s\n", marker, p.PID, name)
+	}
 }

@@ -88,6 +88,10 @@ func main() {
 			handleAttach(st)
 		case "3":
 			handleDetach(st)
+		case "3s":
+			handleSwitchProcess(st)
+		case "3l":
+			handleListAttached(st)
 		case "4":
 			if requireAttached(pid) {
 				if err := drv.Stop(pid); err != nil {
@@ -443,6 +447,8 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 1s. Attach by Name")
 	fmt.Println("  2. Attach by PID")
 	fmt.Println("  3. Detach")
+	fmt.Println(" 3s. Switch Active Process")
+	fmt.Println(" 3l. List Attached Processes")
 	fmt.Println("  4. Stop Process")
 	fmt.Println("  5. Continue Process")
 	fmt.Println("--- Search ---")
