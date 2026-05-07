@@ -906,6 +906,28 @@ func (h *handler) bookmarkModifyAll(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "count": count})
 }
 
+// --- import ---
+
+func (h *handler) importCT(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := decode(r, &req); err != nil || req.Path == "" {
+		writeError(w, 400, "path required")
+		return
+	}
+	bookmarks, err := store.ImportCT(req.Path)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	bl := h.state.GetBookmarks()
+	for _, b := range bookmarks {
+		bl.Add(b.Addr, b.Label, b.VType)
+	}
+	writeJSON(w, map[string]any{"ok": true, "imported": len(bookmarks)})
+}
+
 // --- session ---
 
 func (h *handler) sessionSave(w http.ResponseWriter, r *http.Request) {

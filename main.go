@@ -366,6 +366,10 @@ func main() {
 				fmt.Printf("Remove: %v\n", err)
 			}
 
+		// --- Import ---
+		case "ct":
+			handleImportCT(st)
+
 		// --- Session ---
 		case "28":
 			path := prompt(fmt.Sprintf("Save file [default: %s]: ", defaultStateFile))
@@ -476,6 +480,8 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println("--- Pointer ---")
 	fmt.Println(" pt. Pointer Scan")
 	fmt.Println(" pr. Resolve Pointer Chain")
+	fmt.Println("--- Import ---")
+	fmt.Println(" ct. Import CheatEngine .CT file")
 	fmt.Println("--- Bookmarks ---")
 	fmt.Println(" 24. Add Bookmark")
 	fmt.Println(" 25. List Bookmarks")

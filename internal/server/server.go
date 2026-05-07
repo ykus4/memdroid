@@ -93,6 +93,9 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 	mux.HandleFunc("/api/bookmark/remove", h.bookmarkRemove)
 	mux.HandleFunc("/api/bookmark/modify-all", h.bookmarkModifyAll)
 
+	// Import
+	mux.HandleFunc("/api/import/ct", h.importCT)
+
 	// Session
 	mux.HandleFunc("/api/session/save", h.sessionSave)
 	mux.HandleFunc("/api/session/load", h.sessionLoad)

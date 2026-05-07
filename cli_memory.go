@@ -10,6 +10,7 @@ import (
 	"memodroid/internal/memory/modify"
 	"memodroid/internal/memory/pointer"
 	"memodroid/internal/memory/search"
+	"memodroid/internal/memory/store"
 	"memodroid/internal/memory/watch"
 )
 
@@ -203,6 +204,24 @@ func splitOffsets(s string) []string {
 		}
 	}
 	return parts
+}
+
+func handleImportCT(st *app.State) {
+	path := prompt("CT file path: ")
+	if path == "" {
+		fmt.Println("Path required")
+		return
+	}
+	bookmarks, err := store.ImportCT(path)
+	if err != nil {
+		fmt.Printf("Import failed: %v\n", err)
+		return
+	}
+	bl := st.GetBookmarks()
+	for _, b := range bookmarks {
+		bl.Add(b.Addr, b.Label, b.VType)
+	}
+	fmt.Printf("Imported %d bookmarks from %s\n", len(bookmarks), path)
 }
 
 func handleShowMaps(st *app.State) {
