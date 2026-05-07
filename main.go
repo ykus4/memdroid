@@ -327,6 +327,10 @@ func main() {
 			if requireAttached(pid) {
 				handlePointerScan(st)
 			}
+		case "pr":
+			if requireAttached(pid) {
+				handlePointerResolve(st)
+			}
 
 		// --- Bookmarks ---
 		case "24":
@@ -471,6 +475,7 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println("23m. Show Memory Maps")
 	fmt.Println("--- Pointer ---")
 	fmt.Println(" pt. Pointer Scan")
+	fmt.Println(" pr. Resolve Pointer Chain")
 	fmt.Println("--- Bookmarks ---")
 	fmt.Println(" 24. Add Bookmark")
 	fmt.Println(" 25. List Bookmarks")

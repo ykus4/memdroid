@@ -489,6 +489,42 @@ func (h *handler) pointerScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"target": fmt.Sprintf("0x%x", addr), "chains": out})
 }
 
+// --- pointer resolve ---
+
+func (h *handler) pointerResolve(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	_ = pid
+	var req struct {
+		Label   string  `json:"label"`
+		Offsets []int64 `json:"offsets"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if req.Label == "" || len(req.Offsets) == 0 {
+		writeError(w, 400, "label and offsets required")
+		return
+	}
+	chain := pointer.Chain{
+		BaseLabel: req.Label,
+		Offsets:   req.Offsets,
+	}
+	resolved, err := pointer.ResolveChain(h.state.GetDriver(), h.state.GetPID(), chain)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{
+		"resolved": fmt.Sprintf("0x%x", resolved),
+		"label":    req.Label,
+		"offsets":  req.Offsets,
+	})
+}
+
 // --- memory ---
 
 func (h *handler) memoryModify(w http.ResponseWriter, r *http.Request) {

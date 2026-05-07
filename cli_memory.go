@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"memodroid/internal/app"
@@ -158,6 +159,50 @@ func handlePointerScan(st *app.State) {
 	for i, c := range result.Chains {
 		fmt.Printf("  [%d] %s\n", i+1, pointer.FormatChain(c))
 	}
+}
+
+func handlePointerResolve(st *app.State) {
+	label := prompt("Module name (e.g. libil2cpp.so): ")
+	if label == "" {
+		fmt.Println("Module name required")
+		return
+	}
+	offsetsStr := prompt("Offsets (comma-separated hex, e.g. 0x10,0x20,0x8): ")
+	if offsetsStr == "" {
+		fmt.Println("Offsets required")
+		return
+	}
+	parts := splitOffsets(offsetsStr)
+	offsets := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		v, err := strconv.ParseInt(p, 0, 64)
+		if err != nil {
+			fmt.Printf("Invalid offset %q: %v\n", p, err)
+			return
+		}
+		offsets = append(offsets, v)
+	}
+	chain := pointer.Chain{
+		BaseLabel: label,
+		Offsets:   offsets,
+	}
+	resolved, err := pointer.ResolveChain(st.GetDriver(), st.GetPID(), chain)
+	if err != nil {
+		fmt.Printf("Resolve failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Resolved address: 0x%x\n", resolved)
+}
+
+func splitOffsets(s string) []string {
+	var parts []string
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return parts
 }
 
 func handleShowMaps(st *app.State) {

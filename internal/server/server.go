@@ -71,6 +71,7 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 
 	// Pointer scan
 	mux.HandleFunc("/api/pointer/scan", h.pointerScan)
+	mux.HandleFunc("/api/pointer/resolve", h.pointerResolve)
 
 	// Memory
 	mux.HandleFunc("/api/memory/modify", h.memoryModify)
