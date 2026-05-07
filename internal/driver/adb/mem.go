@@ -23,7 +23,7 @@ func (a *ADB) Peek(pid int, addr uintptr, size int) ([]byte, error) {
 		return nil, fmt.Errorf("peek decode 0x%x: %w", addr, err)
 	}
 	if len(decoded) != size {
-		return nil, fmt.Errorf("peek 0x%x: wanted %d bytes, got %d", addr, size, len(decoded))
+		return nil, fmt.Errorf("peek 0x%x: short read (wanted %d bytes, got %d — address may be at region boundary or unmapped)", addr, size, len(decoded))
 	}
 	return decoded, nil
 }
@@ -87,8 +87,7 @@ func (a *ADB) ReadRegion(pid int, addr uintptr, size int) ([]byte, error) {
 			return nil, fmt.Errorf("read region decode 0x%x: %w", cur, err)
 		}
 		if len(decoded) == 0 {
-			// Region is not readable (e.g. guard page); treat as error.
-			return nil, fmt.Errorf("read region 0x%x: empty read", cur)
+			return nil, fmt.Errorf("read region 0x%x+%d: empty output (region may be inaccessible or guard page)", cur, rem)
 		}
 		out = append(out, decoded...)
 		if len(decoded) < rem {
