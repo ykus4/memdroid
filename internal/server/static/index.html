@@ -391,6 +391,10 @@ tbody tr:hover td{background:var(--bg3)}
           <input id="unfreeze-addr" placeholder="Address to unfreeze (hex)">
           <button class="btn danger" onclick="memUnfreeze()">Unfreeze</button>
         </div>
+        <div class="row" style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px">
+          <input id="freeze-interval" placeholder="Interval ms [100]" style="max-width:130px">
+          <button class="btn sm" onclick="setFreezeInterval()">Set interval</button>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -792,6 +796,12 @@ async function quickUnfreeze(addr) {
   const r = await api('/memory/unfreeze', {addr});
   log(r.error||'Unfrozen', !r.error);
   loadFrozen();
+}
+async function setFreezeInterval() {
+  const ms = parseInt(document.getElementById('freeze-interval').value);
+  if (!ms || ms <= 0) { log('Invalid interval', false); return; }
+  const r = await api('/memory/freeze-interval', {interval_ms: ms});
+  log(r.error || `Freeze interval: ${ms}ms`, !r.error);
 }
 
 // ── Maps ─────────────────────────────────────────────

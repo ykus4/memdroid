@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"memodroid/internal/app"
 	"memodroid/internal/driver/adb"
@@ -520,6 +521,22 @@ func (h *handler) memoryFreeze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (h *handler) freezeSetInterval(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IntervalMs int `json:"interval_ms"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if req.IntervalMs <= 0 {
+		writeError(w, 400, "interval_ms must be positive")
+		return
+	}
+	h.state.Freezer.SetInterval(time.Duration(req.IntervalMs) * time.Millisecond)
+	writeJSON(w, map[string]any{"ok": true, "interval_ms": req.IntervalMs})
 }
 
 func (h *handler) memoryFreezeAll(w http.ResponseWriter, _ *http.Request) {
