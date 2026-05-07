@@ -3,6 +3,7 @@
 package adb
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -10,6 +11,16 @@ import (
 
 	"memodroid/internal/driver"
 )
+
+// execErr enriches an exec error with the stderr output from the failed command.
+func execErr(op string, err error) error {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+		detail := strings.TrimSpace(string(exitErr.Stderr))
+		return fmt.Errorf("%s: %s", op, detail)
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
 
 // ADB implements driver.Driver using the adb CLI.
 type ADB struct {
@@ -43,7 +54,7 @@ func (a *ADB) SelectDevice(serial string) error {
 func (a *ADB) ConnectWifi(addr string) error {
 	out, err := exec.Command("adb", "connect", addr).Output()
 	if err != nil {
-		return fmt.Errorf("adb connect %s: %w", addr, err)
+		return execErr(fmt.Sprintf("adb connect %s", addr), err)
 	}
 	result := strings.TrimSpace(string(out))
 	if strings.HasPrefix(result, "failed") || strings.HasPrefix(result, "error") {
@@ -60,7 +71,7 @@ func (a *ADB) ConnectWifi(addr string) error {
 func (a *ADB) DisconnectWifi(addr string) error {
 	_, err := exec.Command("adb", "disconnect", addr).Output()
 	if err != nil {
-		return fmt.Errorf("adb disconnect %s: %w", addr, err)
+		return execErr(fmt.Sprintf("adb disconnect %s", addr), err)
 	}
 	a.mu.Lock()
 	if a.serial == addr {
@@ -74,7 +85,7 @@ func (a *ADB) DisconnectWifi(addr string) error {
 func (a *ADB) ListDevices() ([]string, error) {
 	out, err := exec.Command("adb", "devices").Output()
 	if err != nil {
-		return nil, fmt.Errorf("adb devices: %w", err)
+		return nil, execErr("adb devices", err)
 	}
 	var serials []string
 	for _, line := range strings.Split(string(out), "\n") {
@@ -96,7 +107,7 @@ func (a *ADB) shell(args ...string) ([]byte, error) {
 	cmdArgs = append(cmdArgs, args...)
 	out, err := exec.Command("adb", cmdArgs...).Output()
 	if err != nil {
-		return nil, fmt.Errorf("adb shell %s: %w", strings.Join(args, " "), err)
+		return nil, execErr(fmt.Sprintf("adb shell %s", strings.Join(args, " ")), err)
 	}
 	return out, nil
 }

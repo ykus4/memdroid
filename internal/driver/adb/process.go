@@ -12,7 +12,7 @@ import (
 func (a *ADB) ListProcesses() ([]driver.ProcessInfo, error) {
 	out, err := a.shell("ps", "-A")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list processes: %w", err)
 	}
 	var procs []driver.ProcessInfo
 	for _, line := range strings.Split(string(out), "\n") {
