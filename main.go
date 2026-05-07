@@ -251,21 +251,7 @@ func main() {
 				fmt.Printf("Freezing 0x%x\n", addr)
 			}
 		case "17i":
-			s := prompt(fmt.Sprintf("Freeze interval [current: %v]: ", st.Freezer.GetInterval()))
-			if s == "" {
-				continue
-			}
-			d, err := time.ParseDuration(s)
-			if err != nil {
-				fmt.Println("Invalid duration (e.g. 50ms, 200ms, 1s)")
-				continue
-			}
-			if d <= 0 {
-				fmt.Println("Interval must be positive")
-				continue
-			}
-			st.Freezer.SetInterval(d)
-			fmt.Printf("Freeze interval set to %v\n", d)
+			handleSetFreezeInterval(st)
 		case "17a":
 			if requireSession(sess) {
 				count := st.Freezer.FreezeAllCandidates(drv, sess)
@@ -312,6 +298,10 @@ func main() {
 		case "23":
 			if requireAttached(pid) {
 				handleDump(st)
+			}
+		case "23d":
+			if requireAttached(pid) {
+				handleSnapshotDiff(st)
 			}
 		case "23m":
 			if requireAttached(pid) {
@@ -461,6 +451,7 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 21. Unwatch Address")
 	fmt.Println(" 22. List Watched")
 	fmt.Println(" 23. Dump Memory Region")
+	fmt.Println("23d. Snapshot Diff")
 	fmt.Println("23m. Show Memory Maps")
 	fmt.Println("--- Pointer ---")
 	fmt.Println(" pt. Pointer Scan")

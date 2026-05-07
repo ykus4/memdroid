@@ -10,6 +10,24 @@ import (
 	"memodroid/internal/memory/pointer"
 )
 
+func handleSetFreezeInterval(st *app.State) {
+	s := prompt(fmt.Sprintf("Freeze interval [current: %v]: ", st.Freezer.GetInterval()))
+	if s == "" {
+		return
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		fmt.Println("Invalid duration (e.g. 50ms, 200ms, 1s)")
+		return
+	}
+	if d <= 0 {
+		fmt.Println("Interval must be positive")
+		return
+	}
+	st.Freezer.SetInterval(d)
+	fmt.Printf("Freeze interval set to %v\n", d)
+}
+
 func handleWatch(st *app.State) {
 	addr, ok := parseAddr("Address (hex): ")
 	if !ok {
@@ -49,6 +67,59 @@ func handleDump(st *app.State) {
 		fmt.Printf("Dump failed: %v\n", err)
 	} else {
 		fmt.Printf("Dumped %d bytes from 0x%x to %s\n", size, addr, path)
+	}
+}
+
+func handleSnapshotDiff(st *app.State) {
+	addr, ok := parseAddr("Start address (hex): ")
+	if !ok {
+		return
+	}
+	size, err := strconv.Atoi(prompt("Size (bytes, decimal): "))
+	if err != nil || size <= 0 {
+		fmt.Println("Invalid size")
+		return
+	}
+	fmt.Println("Taking snapshot A...")
+	snapA, err := modify.TakeSnapshot(st.GetDriver(), st.GetPID(), addr, size)
+	if err != nil {
+		fmt.Printf("Snapshot failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Snapshot A: %d bytes at 0x%x\n", len(snapA.Data), addr)
+	prompt("Make changes in the target process, then press Enter...")
+	fmt.Println("Taking snapshot B...")
+	snapB, err := modify.TakeSnapshot(st.GetDriver(), st.GetPID(), addr, size)
+	if err != nil {
+		fmt.Printf("Snapshot failed: %v\n", err)
+		return
+	}
+	diffs, err := modify.DiffSnapshots(snapA, snapB)
+	if err != nil {
+		fmt.Printf("Diff failed: %v\n", err)
+		return
+	}
+	if len(diffs) == 0 {
+		fmt.Println("No differences found")
+		return
+	}
+	fmt.Printf("Found %d changed bytes:\n", len(diffs))
+	shown := 0
+	for _, d := range diffs {
+		fmt.Printf("  0x%x (+0x%x): 0x%02x -> 0x%02x\n", d.Addr, d.Offset, d.Before, d.After)
+		shown++
+		if shown >= 50 {
+			fmt.Printf("  ... (%d total)\n", len(diffs))
+			break
+		}
+	}
+	path := prompt("Save diff to file [empty = skip]: ")
+	if path != "" {
+		if err := modify.WriteDiff(diffs, addr, path); err != nil {
+			fmt.Printf("Write failed: %v\n", err)
+		} else {
+			fmt.Printf("Diff saved to %s\n", path)
+		}
 	}
 }
 
