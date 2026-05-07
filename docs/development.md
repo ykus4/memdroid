@@ -54,9 +54,11 @@ Enabled: `gofmt`, `goimports`, `govet`, `errcheck`, `staticcheck`
    - `internal/process/` — process lifecycle
    - `internal/driver/adb/` — ADB-level operations
 
-2. Wire up the new function in `main.go` and add a menu entry to `printMenu`, and register any new REST endpoint in `server.go`.
+2. Add the CLI handler to the appropriate `cli_*.go` file (or create a new one for a distinct category). Add a menu entry in `printMenu` and a dispatch case in `main.go`.
 
-3. Update [docs/usage.md](usage.md) and [docs/architecture.md](architecture.md).
+3. Register any new REST endpoint in `internal/server/server.go`.
+
+4. Update [docs/usage.md](usage.md) and [docs/architecture.md](architecture.md).
 
 ## Commit Convention
 

@@ -107,6 +107,12 @@ pt  Pointer Scan       →  find stable address for next session
 ```
 memdroid
 ├── CLI (main goroutine)
+│     ├── main.go          — entry point + REPL loop
+│     ├── cli_helpers.go   — prompt, parse, guards
+│     ├── cli_device.go    — device handlers
+│     ├── cli_process.go   — process handlers
+│     ├── cli_search.go    — search/filter handlers
+│     └── cli_memory.go    — modify, watch, pointer, maps, bookmarks
 ├── HTTP Server :8080 — Web UI + REST API + WebSocket
 └── app.State (mutex-protected)
       └── driver.Driver

@@ -59,10 +59,23 @@ internal/
         └── save.go        # Save / Load JSON state (bookmarks + candidates)
 ```
 
+## CLI Source Layout
+
+The root-level `package main` is split into focused files:
+
+```
+main.go            # main() entry point, REPL dispatch loop, printMenu()
+cli_helpers.go     # prompt(), parseAddr(), parseValue(), require* guards
+cli_device.go      # handleSelectDevice, handleConnectWifi, handleDisconnectWifi
+cli_process.go     # doAttach, handleAttach, handleAttachByName, handleDetach
+cli_search.go      # handleSetValueType, handleSearchFiltered, handleShowCandidates
+cli_memory.go      # handleWatch, handleDump, handlePointerScan, handleShowMaps, handleBookmarkList
+```
+
 ## Dependency Graph
 
 ```
-main
+main (cli_*.go)
  ├── app.State
  ├── driver/adb              (no internal deps — exec.Command("adb", ...) only)
  ├── process                 → driver
