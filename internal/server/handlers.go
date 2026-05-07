@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 
 	"memodroid/internal/app"
@@ -378,26 +379,62 @@ func (h *handler) searchFilter(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"candidates": sess.CandidateCount()})
 }
 
-func (h *handler) searchCandidates(w http.ResponseWriter, _ *http.Request) {
+func (h *handler) searchCandidates(w http.ResponseWriter, r *http.Request) {
 	sess := h.state.GetSession()
 	vt := h.state.GetValueType()
 	if sess == nil {
-		writeJSON(w, []any{})
+		writeJSON(w, map[string]any{"total": 0, "page": 0, "page_size": 100, "items": []any{}})
 		return
 	}
+
+	pageSize := 100
+	page := 0
+	if s := r.URL.Query().Get("page_size"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v > 0 {
+			pageSize = v
+		}
+	}
+	if s := r.URL.Query().Get("page"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v >= 0 {
+			page = v
+		}
+	}
+
 	snap := sess.Snapshot()
+	addrs := make([]uintptr, 0, len(snap))
+	for addr := range snap {
+		addrs = append(addrs, addr)
+	}
+	sort.Slice(addrs, func(i, j int) bool { return addrs[i] < addrs[j] })
+
+	total := len(addrs)
+	start := page * pageSize
+	if start > total {
+		start = total
+	}
+	end := start + pageSize
+	if end > total {
+		end = total
+	}
+
 	type entry struct {
 		Addr  string `json:"addr"`
 		Value string `json:"value"`
 	}
-	out := make([]entry, 0, len(snap))
-	for addr, val := range snap {
-		out = append(out, entry{
+	items := make([]entry, 0, end-start)
+	for _, addr := range addrs[start:end] {
+		items = append(items, entry{
 			Addr:  fmt.Sprintf("0x%x", addr),
-			Value: search.FormatValue(val, vt),
+			Value: search.FormatValue(snap[addr], vt),
 		})
 	}
-	writeJSON(w, out)
+
+	writeJSON(w, map[string]any{
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+		"items":     items,
+	})
 }
 
 func (h *handler) searchReset(w http.ResponseWriter, _ *http.Request) {
