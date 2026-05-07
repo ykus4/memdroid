@@ -615,6 +615,83 @@ func (h *handler) memoryFrozen(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, out)
 }
 
+// --- hexdump ---
+
+func (h *handler) memoryHexdump(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	addrStr := r.URL.Query().Get("addr")
+	sizeStr := r.URL.Query().Get("size")
+	if addrStr == "" || sizeStr == "" {
+		writeError(w, 400, "addr and size required")
+		return
+	}
+	addr, err := parseHexAddr(addrStr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil || size <= 0 || size > 4096 {
+		writeError(w, 400, "size must be 1-4096")
+		return
+	}
+	data, err := h.state.GetDriver().ReadRegion(pid, addr, size)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	type hexLine struct {
+		Offset int    `json:"offset"`
+		Hex    string `json:"hex"`
+		ASCII  string `json:"ascii"`
+	}
+	var lines []hexLine
+	for i := 0; i < len(data); i += 16 {
+		end := i + 16
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := data[i:end]
+
+		// Build hex string
+		hexParts := make([]string, len(chunk))
+		for j, b := range chunk {
+			hexParts[j] = fmt.Sprintf("%02x", b)
+		}
+		hexStr := ""
+		for j, p := range hexParts {
+			if j > 0 {
+				hexStr += " "
+			}
+			hexStr += p
+		}
+
+		// Build ASCII string
+		ascii := make([]byte, len(chunk))
+		for j, b := range chunk {
+			if b >= 0x20 && b <= 0x7e {
+				ascii[j] = b
+			} else {
+				ascii[j] = '.'
+			}
+		}
+
+		lines = append(lines, hexLine{
+			Offset: i,
+			Hex:    hexStr,
+			ASCII:  string(ascii),
+		})
+	}
+	writeJSON(w, map[string]any{
+		"addr":      fmt.Sprintf("0x%x", addr),
+		"hex_lines": lines,
+	})
+}
+
 // --- snapshot ---
 
 func (h *handler) snapshotTake(w http.ResponseWriter, r *http.Request) {

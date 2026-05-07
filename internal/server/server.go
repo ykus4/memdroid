@@ -80,6 +80,7 @@ func Start(addr string, state *app.State, d *adb.ADB) error {
 	mux.HandleFunc("/api/memory/freeze-all", h.memoryFreezeAll)
 	mux.HandleFunc("/api/memory/unfreeze", h.memoryUnfreeze)
 	mux.HandleFunc("/api/memory/frozen", h.memoryFrozen)
+	mux.HandleFunc("/api/memory/hexdump", h.memoryHexdump)
 
 	// Snapshot
 	mux.HandleFunc("/api/snapshot/take", h.snapshotTake)

@@ -215,6 +215,7 @@ tbody tr:hover td{background:var(--bg3)}
   </nav>
   <div class="nav-group">Tools</div>
   <nav>
+    <a data-panel="hex"><span class="icon">🔢</span>Hex Viewer</a>
     <a data-panel="maps"><span class="icon">🗺️</span>Maps</a>
     <a data-panel="watch"><span class="icon">👁️</span>Watch</a>
     <a data-panel="bookmarks"><span class="icon">🔖</span>Bookmarks</a>
@@ -433,6 +434,22 @@ tbody tr:hover td{background:var(--bg3)}
     <div class="table-wrap">
       <table><thead><tr><th>Chain</th><th>Base</th><th>Offsets</th></tr></thead>
       <tbody id="ptr-table"><tr><td class="empty" colspan="3">No results</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- Hex Viewer -->
+  <div class="panel" id="panel-hex">
+    <div class="page-title"><span class="icon">🔢</span>Hex Viewer</div>
+    <div class="card">
+      <div class="card-title">Read memory</div>
+      <div class="row">
+        <input id="hex-addr" placeholder="Address (0x…)">
+        <input id="hex-size" placeholder="Size [256]" style="max-width:120px">
+        <button class="btn primary" onclick="loadHexdump()">Load</button>
+      </div>
+    </div>
+    <div class="card" style="padding:12px">
+      <pre id="hex-output" style="font-size:12px;line-height:1.6;overflow-x:auto;color:var(--text);margin:0;white-space:pre">No data loaded</pre>
     </div>
   </div>
 
@@ -835,6 +852,24 @@ async function setFreezeInterval() {
   if (!ms || ms <= 0) { log('Invalid interval', false); return; }
   const r = await api('/memory/freeze-interval', {interval_ms: ms});
   log(r.error || `Freeze interval: ${ms}ms`, !r.error);
+}
+
+// ── Hex Viewer ───────────────────────────────────────
+async function loadHexdump() {
+  const addr = document.getElementById('hex-addr').value.trim();
+  const size = document.getElementById('hex-size').value.trim() || '256';
+  if (!addr) { log('Address required', false); return; }
+  const res = await fetch(`/api/memory/hexdump?addr=${encodeURIComponent(addr)}&size=${encodeURIComponent(size)}`).then(r=>r.json());
+  if (res.error) { log(res.error, false); return; }
+  const out = document.getElementById('hex-output');
+  if (!res.hex_lines || !res.hex_lines.length) { out.textContent = 'No data'; return; }
+  const lines = res.hex_lines.map(l => {
+    const off = l.offset.toString(16).padStart(8,'0');
+    const hex = l.hex.padEnd(47,' ');
+    return `${off}  ${hex}  |${l.ascii}|`;
+  });
+  out.textContent = lines.join('\n');
+  log(`Hex dump loaded: ${res.hex_lines.length} lines`);
 }
 
 // ── Maps ─────────────────────────────────────────────
