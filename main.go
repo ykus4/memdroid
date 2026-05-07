@@ -304,6 +304,59 @@ func handleDump(st *app.State) {
 	}
 }
 
+func handleSnapshotDiff(st *app.State) {
+	addr, ok := parseAddr("Start address (hex): ")
+	if !ok {
+		return
+	}
+	size, err := strconv.Atoi(prompt("Size (bytes, decimal): "))
+	if err != nil || size <= 0 {
+		fmt.Println("Invalid size")
+		return
+	}
+	fmt.Println("Taking snapshot A...")
+	snapA, err := modify.TakeSnapshot(st.GetDriver(), st.GetPID(), addr, size)
+	if err != nil {
+		fmt.Printf("Snapshot failed: %v\n", err)
+		return
+	}
+	fmt.Printf("Snapshot A: %d bytes at 0x%x\n", len(snapA.Data), addr)
+	prompt("Make changes in the target process, then press Enter...")
+	fmt.Println("Taking snapshot B...")
+	snapB, err := modify.TakeSnapshot(st.GetDriver(), st.GetPID(), addr, size)
+	if err != nil {
+		fmt.Printf("Snapshot failed: %v\n", err)
+		return
+	}
+	diffs, err := modify.DiffSnapshots(snapA, snapB)
+	if err != nil {
+		fmt.Printf("Diff failed: %v\n", err)
+		return
+	}
+	if len(diffs) == 0 {
+		fmt.Println("No differences found")
+		return
+	}
+	fmt.Printf("Found %d changed bytes:\n", len(diffs))
+	shown := 0
+	for _, d := range diffs {
+		fmt.Printf("  0x%x (+0x%x): 0x%02x -> 0x%02x\n", d.Addr, d.Offset, d.Before, d.After)
+		shown++
+		if shown >= 50 {
+			fmt.Printf("  ... (%d total)\n", len(diffs))
+			break
+		}
+	}
+	path := prompt("Save diff to file [empty = skip]: ")
+	if path != "" {
+		if err := modify.WriteDiff(diffs, addr, path); err != nil {
+			fmt.Printf("Write failed: %v\n", err)
+		} else {
+			fmt.Printf("Diff saved to %s\n", path)
+		}
+	}
+}
+
 func handlePointerScan(st *app.State) {
 	addr, ok := parseAddr("Target address (hex): ")
 	if !ok {
@@ -642,6 +695,10 @@ func main() {
 			if requireAttached(pid) {
 				handleDump(st)
 			}
+		case "23d":
+			if requireAttached(pid) {
+				handleSnapshotDiff(st)
+			}
 		case "23m":
 			if requireAttached(pid) {
 				handleShowMaps(st)
@@ -789,6 +846,7 @@ func printMenu(st *app.State, d *adb.ADB) {
 	fmt.Println(" 21. Unwatch Address")
 	fmt.Println(" 22. List Watched")
 	fmt.Println(" 23. Dump Memory Region")
+	fmt.Println("23d. Snapshot Diff")
 	fmt.Println("23m. Show Memory Maps")
 	fmt.Println("--- Pointer ---")
 	fmt.Println(" pt. Pointer Scan")

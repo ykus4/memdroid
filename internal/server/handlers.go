@@ -561,6 +561,101 @@ func (h *handler) memoryFrozen(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, out)
 }
 
+// --- snapshot ---
+
+func (h *handler) snapshotTake(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	var req struct {
+		Addr string `json:"addr"`
+		Size int    `json:"size"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	addr, err := parseHexAddr(req.Addr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	if req.Size <= 0 {
+		writeError(w, 400, "size must be positive")
+		return
+	}
+	drv := h.state.GetDriver()
+	data, readErr := drv.ReadRegion(pid, addr, req.Size)
+	if readErr != nil {
+		writeError(w, 500, readErr.Error())
+		return
+	}
+	// Store snapshot in state for later diff
+	h.state.SetSnapshot(addr, data)
+	writeJSON(w, map[string]any{"ok": true, "addr": fmt.Sprintf("0x%x", addr), "size": len(data)})
+}
+
+func (h *handler) snapshotDiff(w http.ResponseWriter, r *http.Request) {
+	pid, ok := requirePID(w, h)
+	if !ok {
+		return
+	}
+	_ = pid
+	var req struct {
+		Addr string `json:"addr"`
+		Size int    `json:"size"`
+	}
+	if err := decode(r, &req); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	addr, err := parseHexAddr(req.Addr)
+	if err != nil {
+		writeError(w, 400, "invalid addr")
+		return
+	}
+	if req.Size <= 0 {
+		writeError(w, 400, "size must be positive")
+		return
+	}
+	prev := h.state.GetSnapshot(addr)
+	if prev == nil {
+		writeError(w, 400, "no snapshot taken for this address — call /api/snapshot/take first")
+		return
+	}
+	drv := h.state.GetDriver()
+	cur, readErr := drv.ReadRegion(h.state.GetPID(), addr, req.Size)
+	if readErr != nil {
+		writeError(w, 500, readErr.Error())
+		return
+	}
+	minLen := len(prev)
+	if len(cur) < minLen {
+		minLen = len(cur)
+	}
+	type diffEntry struct {
+		Addr   string `json:"addr"`
+		Offset int    `json:"offset"`
+		Before int    `json:"before"`
+		After  int    `json:"after"`
+	}
+	var diffs []diffEntry
+	for i := 0; i < minLen; i++ {
+		if prev[i] != cur[i] {
+			diffs = append(diffs, diffEntry{
+				Addr:   fmt.Sprintf("0x%x", addr+uintptr(i)),
+				Offset: i,
+				Before: int(prev[i]),
+				After:  int(cur[i]),
+			})
+		}
+	}
+	// Update stored snapshot to current
+	h.state.SetSnapshot(addr, cur)
+	writeJSON(w, map[string]any{"total": len(diffs), "diffs": diffs})
+}
+
 // --- bookmarks ---
 
 func (h *handler) bookmarkList(w http.ResponseWriter, _ *http.Request) {

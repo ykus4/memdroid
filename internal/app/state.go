@@ -19,6 +19,7 @@ type State struct {
 	valueType search.ValueType
 	session   *search.Session
 	bookmarks *store.BookmarkList
+	snapshots map[uintptr][]byte
 
 	Freezer   *modify.Freezer
 	UndoStack *modify.UndoStack
@@ -30,6 +31,7 @@ func NewState(drv driver.Driver) *State {
 		drv:       drv,
 		valueType: search.TypeInt32,
 		bookmarks: store.NewBookmarkList(),
+		snapshots: make(map[uintptr][]byte),
 		Freezer:   modify.NewFreezer(),
 		UndoStack: modify.NewUndoStack(),
 		Watcher:   watch.NewWatcher(),
@@ -101,6 +103,22 @@ func (s *State) GetBookmarks() *store.BookmarkList {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.bookmarks
+}
+
+// --- Snapshots ---
+
+func (s *State) SetSnapshot(addr uintptr, data []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cp := make([]byte, len(data))
+	copy(cp, data)
+	s.snapshots[addr] = cp
+}
+
+func (s *State) GetSnapshot(addr uintptr) []byte {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.snapshots[addr]
 }
 
 // WithLock runs f while holding the write lock. Use for multi-step mutations.
