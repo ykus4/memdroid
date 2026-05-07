@@ -18,8 +18,8 @@ type ctFile struct {
 
 // ctEntry represents a single cheat entry in a .CT file.
 type ctEntry struct {
-	Description string `xml:"Description"`
-	Address     string `xml:"Address"`
+	Description  string `xml:"Description"`
+	Address      string `xml:"Address"`
 	VariableType string `xml:"VariableType"`
 }
 
