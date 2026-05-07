@@ -9,7 +9,7 @@ import (
 	"memodroid/internal/memory/search"
 )
 
-const freezeInterval = 100 * time.Millisecond
+const defaultFreezeInterval = 100 * time.Millisecond
 
 type freezeEntry struct {
 	drv   driver.Driver
@@ -21,15 +21,33 @@ type freezeEntry struct {
 
 // Freezer manages a set of frozen addresses.
 type Freezer struct {
-	mu      sync.Mutex
-	entries map[uintptr]*freezeEntry
+	mu       sync.Mutex
+	entries  map[uintptr]*freezeEntry
+	interval time.Duration
 }
 
 func NewFreezer() *Freezer {
-	return &Freezer{entries: make(map[uintptr]*freezeEntry)}
+	return &Freezer{
+		entries:  make(map[uintptr]*freezeEntry),
+		interval: defaultFreezeInterval,
+	}
 }
 
-// Freeze starts a goroutine that repeatedly writes value to addr every 100ms.
+// SetInterval changes the freeze write interval for newly frozen addresses.
+func (f *Freezer) SetInterval(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.interval = d
+}
+
+// GetInterval returns the current freeze interval.
+func (f *Freezer) GetInterval() time.Duration {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.interval
+}
+
+// Freeze starts a goroutine that repeatedly writes value to addr at the configured interval.
 // Returns an error if addr is already frozen.
 func (f *Freezer) Freeze(drv driver.Driver, pid int, addr uintptr, value []byte) error {
 	f.mu.Lock()
@@ -42,11 +60,12 @@ func (f *Freezer) Freeze(drv driver.Driver, pid int, addr uintptr, value []byte)
 	val := make([]byte, len(value))
 	copy(val, value)
 
+	iv := f.interval
 	e := &freezeEntry{drv: drv, pid: pid, addr: addr, value: val, stop: make(chan struct{})}
 	f.entries[addr] = e
 
 	go func() {
-		ticker := time.NewTicker(freezeInterval)
+		ticker := time.NewTicker(iv)
 		defer ticker.Stop()
 		for {
 			select {
