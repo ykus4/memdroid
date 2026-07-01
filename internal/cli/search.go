@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -8,10 +8,13 @@ import (
 	"memodroid/internal/memory/search"
 )
 
-func handleSetValueType(st *app.State) {
+// MaxCandidatesDisplay caps how many search candidates are printed.
+const MaxCandidatesDisplay = 50
+
+func SetValueType(st *app.State) {
 	fmt.Println("Types: 1=int32  2=int64  3=float32  4=float64  5=uint32  6=uint64  7=bytes")
 	var vt search.ValueType
-	switch prompt("Type: ") {
+	switch Prompt("Type: ") {
 	case "1":
 		vt = search.TypeInt32
 	case "2":
@@ -37,11 +40,11 @@ func handleSetValueType(st *app.State) {
 	}
 }
 
-func handleSearchFiltered(st *app.State) {
+func SearchFiltered(st *app.State) {
 	fmt.Println("Region: 1=all  2=heap  3=stack  4=anon  5=custom range")
 	var filter driver.RegionFilter
 	var customStart, customEnd uintptr
-	switch prompt("Region: ") {
+	switch Prompt("Region: ") {
 	case "2":
 		filter = driver.RegionHeap
 	case "3":
@@ -51,16 +54,16 @@ func handleSearchFiltered(st *app.State) {
 	case "5":
 		filter = driver.RegionCustom
 		var ok bool
-		if customStart, ok = parseAddr("Start address (hex): "); !ok {
+		if customStart, ok = ParseAddr("Start address (hex): "); !ok {
 			return
 		}
-		if customEnd, ok = parseAddr("End address (hex): "); !ok {
+		if customEnd, ok = ParseAddr("End address (hex): "); !ok {
 			return
 		}
 	default:
 		filter = driver.RegionAll
 	}
-	val, ok := parseValue("Value: ", st.GetValueType())
+	val, ok := ParseValue("Value: ", st.GetValueType())
 	if !ok {
 		return
 	}
@@ -69,7 +72,7 @@ func handleSearchFiltered(st *app.State) {
 	}
 }
 
-func handleShowCandidates(st *app.State) {
+func ShowCandidates(st *app.State) {
 	sess := st.GetSession()
 	vt := st.GetValueType()
 	candidates := sess.Snapshot()
@@ -81,7 +84,7 @@ func handleShowCandidates(st *app.State) {
 	for addr, val := range candidates {
 		fmt.Printf("  0x%x = %s\n", addr, search.FormatValue(val, vt))
 		shown++
-		if shown >= maxCandidatesDisplay {
+		if shown >= MaxCandidatesDisplay {
 			fmt.Printf("  ... (%d total)\n", len(candidates))
 			break
 		}
