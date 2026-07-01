@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"memodroid/internal/driver/adb"
 )
 
-func handleSelectDevice(d *adb.ADB) {
+func SelectDevice(d *adb.ADB) {
 	devices, err := d.ListDevices()
 	if err != nil {
 		fmt.Printf("Failed to list devices: %v\n", err)
@@ -21,7 +21,7 @@ func handleSelectDevice(d *adb.ADB) {
 	for i, s := range devices {
 		fmt.Printf("  %d. %s\n", i+1, s)
 	}
-	idx, err := strconv.Atoi(prompt("Select device number: "))
+	idx, err := strconv.Atoi(Prompt("Select device number: "))
 	if err != nil || idx < 1 || idx > len(devices) {
 		fmt.Println("Invalid selection")
 		return
@@ -34,8 +34,8 @@ func handleSelectDevice(d *adb.ADB) {
 	fmt.Printf("Using device: %s\n", serial)
 }
 
-func handleConnectWifi(d *adb.ADB) {
-	addr := prompt("Host:port (e.g. 192.168.1.5:5555): ")
+func ConnectWifi(d *adb.ADB) {
+	addr := Prompt("Host:port (e.g. 192.168.1.5:5555): ")
 	if err := d.ConnectWifi(addr); err != nil {
 		fmt.Printf("Connect failed: %v\n", err)
 		return
@@ -43,8 +43,8 @@ func handleConnectWifi(d *adb.ADB) {
 	fmt.Printf("Connected to %s\n", addr)
 }
 
-func handleDisconnectWifi(d *adb.ADB) {
-	addr := prompt("Host:port to disconnect: ")
+func DisconnectWifi(d *adb.ADB) {
+	addr := Prompt("Host:port to disconnect: ")
 	if err := d.DisconnectWifi(addr); err != nil {
 		fmt.Printf("Disconnect failed: %v\n", err)
 		return

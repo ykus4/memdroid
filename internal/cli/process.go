@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"fmt"
@@ -25,8 +25,8 @@ func doAttach(st *app.State, pid int, name string) {
 	}
 }
 
-func handleAttach(st *app.State) {
-	pid, err := strconv.Atoi(prompt("PID: "))
+func Attach(st *app.State) {
+	pid, err := strconv.Atoi(Prompt("PID: "))
 	if err != nil {
 		fmt.Println("Invalid PID")
 		return
@@ -34,8 +34,8 @@ func handleAttach(st *app.State) {
 	doAttach(st, pid, "")
 }
 
-func handleAttachByName(st *app.State, d *adb.ADB) {
-	name := prompt("Process name (partial match): ")
+func AttachByName(st *app.State, d *adb.ADB) {
+	name := Prompt("Process name (partial match): ")
 	matches, err := d.FindProcessByName(name)
 	if err != nil {
 		fmt.Printf("Search failed: %v\n", err)
@@ -52,7 +52,7 @@ func handleAttachByName(st *app.State, d *adb.ADB) {
 	for i, p := range matches {
 		fmt.Printf("  %d. [%d] %s\n", i+1, p.PID, p.Name)
 	}
-	idx, err := strconv.Atoi(prompt("Select: "))
+	idx, err := strconv.Atoi(Prompt("Select: "))
 	if err != nil || idx < 1 || idx > len(matches) {
 		fmt.Println("Invalid selection")
 		return
@@ -60,9 +60,9 @@ func handleAttachByName(st *app.State, d *adb.ADB) {
 	doAttach(st, matches[idx-1].PID, matches[idx-1].Name)
 }
 
-func handleDetach(st *app.State) {
+func Detach(st *app.State) {
 	pid := st.GetPID()
-	if !requireAttached(pid) {
+	if !RequireAttached(pid) {
 		return
 	}
 	st.Freezer.UnfreezeAll()
@@ -71,7 +71,6 @@ func handleDetach(st *app.State) {
 	st.GetDriver().Detach(pid)
 	st.RemoveAttached(pid)
 	fmt.Printf("Detached from PID %d\n", pid)
-	// Switch to another attached process if available
 	remaining := st.ListAttached()
 	if len(remaining) > 0 {
 		next := remaining[0]
@@ -84,7 +83,7 @@ func handleDetach(st *app.State) {
 	}
 }
 
-func handleSwitchProcess(st *app.State) {
+func SwitchProcess(st *app.State) {
 	procs := st.ListAttached()
 	if len(procs) == 0 {
 		fmt.Println("No attached processes")
@@ -103,7 +102,7 @@ func handleSwitchProcess(st *app.State) {
 		}
 		fmt.Printf("  %s%d. [%d] %s\n", marker, i+1, p.PID, name)
 	}
-	idx, err := strconv.Atoi(prompt("Switch to: "))
+	idx, err := strconv.Atoi(Prompt("Switch to: "))
 	if err != nil || idx < 1 || idx > len(procs) {
 		fmt.Println("Invalid selection")
 		return
@@ -114,7 +113,7 @@ func handleSwitchProcess(st *app.State) {
 	fmt.Printf("Active process: PID %d (%s)\n", target.PID, target.Name)
 }
 
-func handleListAttached(st *app.State) {
+func ListAttached(st *app.State) {
 	procs := st.ListAttached()
 	if len(procs) == 0 {
 		fmt.Println("No attached processes")
