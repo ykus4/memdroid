@@ -42,7 +42,7 @@ jobs:
         run: go build -trimpath -ldflags "-s -w" -o memdroid-${{ matrix.suffix }}${{ matrix.ext }} .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: memdroid-${{ matrix.suffix }}
           path: memdroid-${{ matrix.suffix }}${{ matrix.ext }}
