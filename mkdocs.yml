@@ -7,6 +7,8 @@ edit_uri: edit/main/docs/
 
 theme:
   name: material
+  logo: assets/logo.png
+  favicon: assets/logo.png
   palette:
     - scheme: default
       primary: indigo
@@ -21,10 +23,10 @@ theme:
         icon: material/brightness-4
         name: Switch to light mode
   features:
-    - navigation.tabs
-    - navigation.sections
+    - navigation.indexes
     - navigation.top
     - navigation.footer
+    - toc.integrate
     - search.highlight
     - search.suggest
     - content.code.copy
@@ -49,7 +51,10 @@ plugins:
 
 nav:
   - Home: index.md
-  - Usage: usage.md
-  - API Reference: api.md
-  - Architecture: architecture.md
-  - Development: development.md
+  - Guide:
+      - Usage: usage.md
+  - Reference:
+      - API: api.md
+      - Architecture: architecture.md
+  - Contributing:
+      - Development: development.md
