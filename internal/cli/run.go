@@ -5,13 +5,13 @@ import (
 	"os"
 	"strconv"
 
-	"memodroid/internal/app"
-	"memodroid/internal/driver"
-	"memodroid/internal/driver/adb"
-	"memodroid/internal/memory/modify"
-	"memodroid/internal/memory/search"
-	"memodroid/internal/memory/store"
-	"memodroid/internal/process"
+	"memdroid/internal/app"
+	"memdroid/internal/driver"
+	"memdroid/internal/driver/adb"
+	"memdroid/internal/memory/modify"
+	"memdroid/internal/memory/search"
+	"memdroid/internal/memory/store"
+	"memdroid/internal/process"
 )
 
 // DefaultStateFile is the default filename used by Save/Load State.
@@ -324,7 +324,7 @@ func modifyAt(st *app.State, drv driver.Driver, pid int, vt search.ValueType) {
 	if !ok {
 		return
 	}
-	if err := st.UndoStack.WithUndo(drv, pid, addr, val, vt); err != nil {
+	if err := st.UndoStack.WithUndo(drv, pid, addr, val); err != nil {
 		fmt.Printf("Modify failed: %v\n", err)
 	} else {
 		fmt.Printf("Modified 0x%x (undo available, depth: %d)\n", addr, st.UndoStack.Depth())
@@ -382,8 +382,8 @@ func loadSession(st *app.State) {
 	if path == "" {
 		path = DefaultStateFile
 	}
-	loaded := st.GetSession()
-	if err := store.LoadState(path, st.GetBookmarks(), &loaded); err != nil {
+	loaded, err := store.LoadState(path, st.GetBookmarks())
+	if err != nil {
 		fmt.Printf("Load failed: %v\n", err)
 		return
 	}

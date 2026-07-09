@@ -1,6 +1,6 @@
 package modify
 
-import "memodroid/internal/driver"
+import "memdroid/internal/driver"
 
 // Write writes value bytes to addr in the target process.
 func Write(drv driver.Driver, pid int, addr uintptr, value []byte) error {

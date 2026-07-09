@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // ReadMaps returns all rw memory regions for pid.

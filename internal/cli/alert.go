@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"memodroid/internal/app"
-	"memodroid/internal/memory/watch"
+	"memdroid/internal/app"
+	"memdroid/internal/memory/watch"
 )
 
 // DefaultAlertPollInterval is the default polling interval for alert watches.

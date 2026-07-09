@@ -148,56 +148,41 @@ func FormatValue(b []byte, t ValueType) string {
 	return "?"
 }
 
-// CompareValues returns -1, 0, or 1. Not defined for TypeBytes.
+// CompareValues returns -1, 0, or 1. It returns 0 for TypeBytes and for
+// slices shorter than the type's fixed width (guarding against panics on
+// truncated reads).
 func CompareValues(a, b []byte, t ValueType) int {
+	size := t.Size()
+	if size == 0 || len(a) < size || len(b) < size {
+		return 0
+	}
 	switch t {
 	case TypeInt32:
-		return cmpInt(int64(int32(binary.LittleEndian.Uint32(a))),
-			int64(int32(binary.LittleEndian.Uint32(b))))
+		return cmp(int32(binary.LittleEndian.Uint32(a)), int32(binary.LittleEndian.Uint32(b)))
 	case TypeInt64:
-		return cmpInt(int64(binary.LittleEndian.Uint64(a)),
-			int64(binary.LittleEndian.Uint64(b)))
+		return cmp(int64(binary.LittleEndian.Uint64(a)), int64(binary.LittleEndian.Uint64(b)))
 	case TypeFloat32:
-		return cmpFloat(float64(math.Float32frombits(binary.LittleEndian.Uint32(a))),
-			float64(math.Float32frombits(binary.LittleEndian.Uint32(b))))
+		return cmp(math.Float32frombits(binary.LittleEndian.Uint32(a)), math.Float32frombits(binary.LittleEndian.Uint32(b)))
 	case TypeFloat64:
-		return cmpFloat(math.Float64frombits(binary.LittleEndian.Uint64(a)),
-			math.Float64frombits(binary.LittleEndian.Uint64(b)))
+		return cmp(math.Float64frombits(binary.LittleEndian.Uint64(a)), math.Float64frombits(binary.LittleEndian.Uint64(b)))
 	case TypeUint32:
-		return cmpUint(uint64(binary.LittleEndian.Uint32(a)),
-			uint64(binary.LittleEndian.Uint32(b)))
+		return cmp(binary.LittleEndian.Uint32(a), binary.LittleEndian.Uint32(b))
 	case TypeUint64:
-		return cmpUint(binary.LittleEndian.Uint64(a),
-			binary.LittleEndian.Uint64(b))
+		return cmp(binary.LittleEndian.Uint64(a), binary.LittleEndian.Uint64(b))
 	}
 	return 0
 }
 
-func cmpInt(a, b int64) int {
-	if a < b {
+// cmp orders two ordered values, returning -1, 0, or 1.
+func cmp[T int32 | int64 | uint32 | uint64 | float32 | float64](a, b T) int {
+	switch {
+	case a < b:
 		return -1
-	} else if a > b {
+	case a > b:
 		return 1
+	default:
+		return 0
 	}
-	return 0
-}
-
-func cmpUint(a, b uint64) int {
-	if a < b {
-		return -1
-	} else if a > b {
-		return 1
-	}
-	return 0
-}
-
-func cmpFloat(a, b float64) int {
-	if a < b {
-		return -1
-	} else if a > b {
-		return 1
-	}
-	return 0
 }
 
 // EqualBytes reports whether a and b contain identical bytes.

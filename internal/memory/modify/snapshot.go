@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // Snapshot holds a captured memory region for comparison.

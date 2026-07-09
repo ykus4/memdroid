@@ -39,15 +39,34 @@ func Register(ws *websocket.Conn) {
 	mu.Unlock()
 }
 
-// Broadcast sends an Event to all connected WebSocket clients.
+// Broadcast sends an Event to all connected WebSocket clients. Writes happen
+// outside the lock so one slow client can't stall the hub, and clients whose
+// write fails are dropped.
 func Broadcast(e Event) {
 	data, err := json.Marshal(e)
 	if err != nil {
 		return
 	}
+
 	mu.Lock()
-	defer mu.Unlock()
+	snapshot := make([]*websocket.Conn, 0, len(clients))
 	for ws := range clients {
-		_, _ = ws.Write(data)
+		snapshot = append(snapshot, ws)
+	}
+	mu.Unlock()
+
+	var dead []*websocket.Conn
+	for _, ws := range snapshot {
+		if _, err := ws.Write(data); err != nil {
+			dead = append(dead, ws)
+		}
+	}
+
+	if len(dead) > 0 {
+		mu.Lock()
+		for _, ws := range dead {
+			delete(clients, ws)
+		}
+		mu.Unlock()
 	}
 }

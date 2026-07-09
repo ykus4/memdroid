@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"memodroid/internal/driver/adb"
+	"memdroid/internal/driver/adb"
 )
 
 func SelectDevice(d *adb.ADB) {

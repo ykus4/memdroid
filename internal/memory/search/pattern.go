@@ -5,13 +5,13 @@ import (
 	"strconv"
 	"strings"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 const (
 	patternMaxRegionBytes = 256 * 1024 * 1024
 	patternChunkSize      = 4096
-	patternMaxResults     = 200
+	PatternMaxResults     = 200
 )
 
 // PatternByte represents one byte in a search pattern; Wildcard=true matches any byte.
@@ -80,7 +80,7 @@ func SearchPattern(drv driver.Driver, pid int, pattern []PatternByte) ([]uintptr
 				if matchPattern(buf[i:], pattern) {
 					addr := r.Start + uintptr(offset) - uintptr(len(prev)) + uintptr(i)
 					results = append(results, addr)
-					if len(results) >= patternMaxResults {
+					if len(results) >= PatternMaxResults {
 						return results, nil
 					}
 				}

@@ -3,7 +3,7 @@
 ## Overview
 
 ```
-./memodroid
+./memdroid
   ├── CLI (main goroutine)           — interactive menu
   ├── HTTP server (:8080)            — Web UI + REST API + WebSocket
   └── app.State (shared, mutex)
@@ -46,44 +46,47 @@ internal/
     │   ├── pattern.go     # Byte pattern search with ?? wildcard, chunked reads
     │   └── string.go      # UTF-8 / UTF-16LE string search via SearchPattern
     ├── pointer/
-    │   └── pointer.go     # Pointer chain scan — find stable base+offset paths
+    │   ├── pointer.go     # Pointer chain scan — find stable base+offset paths
+    │   └── resolve.go     # Re-resolve a saved chain against a new run
     ├── modify/
     │   ├── modify.go      # Write value / string to address
-    │   ├── undo.go        # Save previous value before modify, revert stack
-    │   ├── freeze.go      # Background goroutine to hold values + FreezeAll
-    │   └── dump.go        # Hex dump memory region to file
+    │   ├── undo.go        # Save previous value before modify, revert stack (mutex-guarded)
+    │   ├── freeze.go      # Freezer — periodic re-write, backed by poller.Pool
+    │   ├── snapshot.go    # Capture / diff a memory region
+    │   └── dump.go        # Hex dump memory region to file (bulk ReadRegion)
     ├── watch/
-    │   └── watch.go       # Background goroutine; notifies on value change via BroadcastFunc
+    │   ├── watch.go       # Watcher — poll for value change, backed by poller.Pool
+    │   └── alert.go       # AlertWatcher — conditional watch + auto-write
     └── store/
         ├── bookmark.go    # Named address bookmarks with bulk modify
-        └── save.go        # Save / Load JSON state (bookmarks + candidates)
+        ├── cheatengine.go # Import CheatEngine .CT tables as bookmarks
+        └── save.go        # Save / Load versioned JSON state (bookmarks + candidates)
+
+internal/poller/
+└── poller.go             # Keyed goroutine manager shared by Freezer/Watcher/AlertWatcher
 ```
 
 ## CLI Source Layout
 
-The root-level `package main` is split into focused files:
-
-```
-main.go            # main() entry point, REPL dispatch loop, printMenu()
-cli_helpers.go     # prompt(), parseAddr(), parseValue(), require* guards
-cli_device.go      # handleSelectDevice, handleConnectWifi, handleDisconnectWifi
-cli_process.go     # doAttach, handleAttach, handleAttachByName, handleDetach
-cli_search.go      # handleSetValueType, handleSearchFiltered, handleShowCandidates
-cli_memory.go      # handleWatch, handleDump, handlePointerScan, handleShowMaps, handleBookmarkList
-```
+The interactive menu lives in `package cli` under `internal/cli/`, one file per
+concern (`run.go` dispatch loop, `prompt.go` input helpers, `device.go`,
+`process.go`, `search.go`, `memory.go`, `pointer.go`, `alert.go`,
+`bookmarks.go`, `menu.go`). `main.go` wires flags, the ADB driver, shared
+state, and the HTTP server, then hands off to `cli.Run`.
 
 ## Dependency Graph
 
 ```
-main (cli_*.go)
+main
  ├── app.State
+ ├── cli
  ├── driver/adb              (no internal deps — exec.Command("adb", ...) only)
  ├── process                 → driver
- ├── server                  → app, driver/adb, memory/*, server/wswatch
+ ├── server                  → app, driver, driver/adb, memory/*, server/wswatch
  ├── memory/search           → driver
  ├── memory/pointer          → driver
- ├── memory/modify           → driver, memory/search
- ├── memory/watch            → driver, memory/search
+ ├── memory/modify           → driver, memory/search, poller
+ ├── memory/watch            → driver, memory/search, poller
  └── memory/store            → memory/search
 ```
 

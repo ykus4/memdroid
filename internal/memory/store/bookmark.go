@@ -3,8 +3,8 @@ package store
 import (
 	"fmt"
 
-	"memodroid/internal/driver"
-	"memodroid/internal/memory/search"
+	"memdroid/internal/driver"
+	"memdroid/internal/memory/search"
 )
 
 type Bookmark struct {

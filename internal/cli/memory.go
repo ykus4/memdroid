@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"time"
 
-	"memodroid/internal/app"
-	"memodroid/internal/memory/modify"
+	"memdroid/internal/app"
+	"memdroid/internal/memory/modify"
 )
 
 // DefaultWatchInterval is the default polling interval when watching an address.

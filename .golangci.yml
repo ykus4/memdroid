@@ -7,7 +7,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - memodroid
+        - memdroid
 
 linters:
   enable:

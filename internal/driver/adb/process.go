@@ -2,10 +2,11 @@ package adb
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // ListProcesses returns all running processes via "adb shell ps -A".
@@ -47,12 +48,17 @@ func (a *ADB) FindProcessByName(substr string) ([]driver.ProcessInfo, error) {
 	return out, nil
 }
 
+// signal sends a POSIX signal to pid via "kill -<sig> <pid>" as root.
+func (a *ADB) signal(pid int, sig string) error {
+	_, err := a.shellRoot(fmt.Sprintf("kill -%s %d", sig, pid))
+	return err
+}
+
 // Attach sends SIGSTOP to the process to pause it before memory operations.
 // On Android we don't use ptrace; instead we stop the process with kill -STOP
 // which requires root.
 func (a *ADB) Attach(pid int) error {
-	_, err := a.shellRoot(fmt.Sprintf("kill -STOP %d", pid))
-	if err != nil {
+	if err := a.signal(pid, "STOP"); err != nil {
 		return fmt.Errorf("attach (SIGSTOP) pid %d: %w", pid, err)
 	}
 	return nil
@@ -60,13 +66,14 @@ func (a *ADB) Attach(pid int) error {
 
 // Detach resumes the process with SIGCONT.
 func (a *ADB) Detach(pid int) {
-	_, _ = a.shellRoot(fmt.Sprintf("kill -CONT %d", pid))
+	if err := a.signal(pid, "CONT"); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: detach (SIGCONT) pid %d failed: %v\n", pid, err)
+	}
 }
 
 // Stop sends SIGSTOP (same as Attach, exposed as an explicit control command).
 func (a *ADB) Stop(pid int) error {
-	_, err := a.shellRoot(fmt.Sprintf("kill -STOP %d", pid))
-	if err != nil {
+	if err := a.signal(pid, "STOP"); err != nil {
 		return fmt.Errorf("stop pid %d: %w", pid, err)
 	}
 	return nil
@@ -74,8 +81,7 @@ func (a *ADB) Stop(pid int) error {
 
 // Continue sends SIGCONT to resume a stopped process.
 func (a *ADB) Continue(pid int) error {
-	_, err := a.shellRoot(fmt.Sprintf("kill -CONT %d", pid))
-	if err != nil {
+	if err := a.signal(pid, "CONT"); err != nil {
 		return fmt.Errorf("continue pid %d: %w", pid, err)
 	}
 	return nil
