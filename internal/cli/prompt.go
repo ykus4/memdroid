@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"memodroid/internal/memory/search"
+	"memdroid/internal/memory/search"
 )
 
 var stdinReader = bufio.NewReader(os.Stdin)

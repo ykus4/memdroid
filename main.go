@@ -1,32 +1,42 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
+	"strings"
 
-	"memodroid/internal/app"
-	"memodroid/internal/cli"
-	"memodroid/internal/driver/adb"
-	"memodroid/internal/memory/watch"
-	"memodroid/internal/server"
+	"memdroid/internal/app"
+	"memdroid/internal/cli"
+	"memdroid/internal/driver/adb"
+	"memdroid/internal/memory/watch"
+	"memdroid/internal/server"
 )
 
-const defaultServerAddr = ":8080"
-
 func main() {
+	addr := flag.String("addr", "127.0.0.1:8080", "HTTP listen address for the Web UI/API")
+	token := flag.String("token", os.Getenv("MEMDROID_TOKEN"), "require this auth token on /api and /ws (empty = no auth)")
+	flag.Parse()
+
 	d := adb.New()
 	autoSelectDevice(d)
 
 	st := app.NewState(d)
 	installWatchHandlers(st)
 
+	if !isLoopback(*addr) && *token == "" {
+		_, _ = fmt.Fprintf(os.Stderr,
+			"WARNING: binding %s exposes root memory access to the network with no auth. Use -addr 127.0.0.1:PORT or set -token.\n",
+			*addr)
+	}
+
 	go func() {
-		if err := server.Start(defaultServerAddr, st, d); err != nil {
+		if err := server.Start(*addr, *token, st, d); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "HTTP server error: %v\n", err)
 		}
 	}()
 
-	cli.ServerAddr = defaultServerAddr
+	cli.ServerURL = server.DisplayURL(*addr)
 	cli.Run(st, d)
 }
 
@@ -58,4 +68,12 @@ func installWatchHandlers(st *app.State) {
 		}
 		fmt.Printf("[Alert] 0x%x: condition=%s value=%s action=%s\n", ev.Addr, ev.Condition, ev.Value, action)
 	}
+}
+
+func isLoopback(addr string) bool {
+	host, _, found := strings.Cut(addr, ":")
+	if !found {
+		host = addr
+	}
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }

@@ -2,11 +2,11 @@ package watch
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
-	"memodroid/internal/driver"
-	"memodroid/internal/memory/search"
+	"memdroid/internal/driver"
+	"memdroid/internal/memory/search"
+	"memdroid/internal/poller"
 )
 
 // AlertCondition defines when an alert fires.
@@ -43,23 +43,15 @@ type AlertEvent struct {
 	Triggered bool // whether an action was taken
 }
 
-type alertEntry struct {
-	cfg  AlertConfig
-	drv  driver.Driver
-	pid  int
-	vt   search.ValueType
-	stop chan struct{}
-}
-
 // AlertWatcher manages conditional watches with automatic actions.
+// OnAlert is invoked from watcher goroutines and must be safe for concurrent use.
 type AlertWatcher struct {
-	mu      sync.Mutex
-	entries map[uintptr]*alertEntry
+	pool    *poller.Pool
 	OnAlert func(AlertEvent)
 }
 
 func NewAlertWatcher() *AlertWatcher {
-	return &AlertWatcher{entries: make(map[uintptr]*alertEntry)}
+	return &AlertWatcher{pool: poller.New()}
 }
 
 func ParseAlertCondition(s string) (AlertCondition, error) {
@@ -91,102 +83,61 @@ func (c AlertCondition) String() string {
 // WatchWithAlert starts a conditional watch. When the condition fires, the
 // action is executed (notify or write).
 func (aw *AlertWatcher) WatchWithAlert(drv driver.Driver, pid int, vt search.ValueType, cfg AlertConfig, interval time.Duration) error {
-	aw.mu.Lock()
-	defer aw.mu.Unlock()
-
-	if _, exists := aw.entries[cfg.Addr]; exists {
-		return fmt.Errorf("alert already set for 0x%x", cfg.Addr)
+	size := vt.Size()
+	if size == 0 {
+		return fmt.Errorf("alert does not support the %s type", vt)
+	}
+	if cfg.Condition != AlertChanged && len(cfg.Threshold) < size {
+		return fmt.Errorf("threshold too short for %s (need %d bytes)", vt, size)
 	}
 
-	e := &alertEntry{cfg: cfg, drv: drv, pid: pid, vt: vt, stop: make(chan struct{})}
-	aw.entries[cfg.Addr] = e
-
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+	return aw.pool.Start(cfg.Addr, func(stop <-chan struct{}) {
 		var lastVal []byte
-		for {
-			select {
-			case <-ticker.C:
-				cur, err := e.drv.Peek(e.pid, e.cfg.Addr, e.vt.Size())
-				if err != nil {
-					continue
-				}
-
-				fired := false
-				switch e.cfg.Condition {
-				case AlertAbove:
-					fired = search.CompareValues(cur, e.cfg.Threshold, e.vt) > 0
-				case AlertBelow:
-					fired = search.CompareValues(cur, e.cfg.Threshold, e.vt) < 0
-				case AlertChanged:
-					if lastVal != nil {
-						fired = !search.EqualBytes(cur, lastVal)
-					}
-				}
-
-				if fired {
-					triggered := false
-					if e.cfg.Action == ActionWrite && len(e.cfg.WriteVal) > 0 {
-						_ = e.drv.Poke(e.pid, e.cfg.Addr, e.cfg.WriteVal)
-						triggered = true
-					}
-					if aw.OnAlert != nil {
-						aw.OnAlert(AlertEvent{
-							Addr:      e.cfg.Addr,
-							Condition: e.cfg.Condition.String(),
-							Value:     search.FormatValue(cur, e.vt),
-							Triggered: triggered,
-						})
-					}
-				}
-
-				if lastVal == nil {
-					lastVal = make([]byte, len(cur))
-				}
-				copy(lastVal, cur)
-			case <-e.stop:
+		poller.EveryTick(interval, stop, func() {
+			cur, err := drv.Peek(pid, cfg.Addr, size)
+			if err != nil {
 				return
 			}
-		}
-	}()
 
-	return nil
+			fired := false
+			switch cfg.Condition {
+			case AlertAbove:
+				fired = search.CompareValues(cur, cfg.Threshold, vt) > 0
+			case AlertBelow:
+				fired = search.CompareValues(cur, cfg.Threshold, vt) < 0
+			case AlertChanged:
+				fired = lastVal != nil && !search.EqualBytes(cur, lastVal)
+			}
+
+			if fired {
+				triggered := false
+				if cfg.Action == ActionWrite && len(cfg.WriteVal) > 0 {
+					_ = drv.Poke(pid, cfg.Addr, cfg.WriteVal)
+					triggered = true
+				}
+				if aw.OnAlert != nil {
+					aw.OnAlert(AlertEvent{
+						Addr:      cfg.Addr,
+						Condition: cfg.Condition.String(),
+						Value:     search.FormatValue(cur, vt),
+						Triggered: triggered,
+					})
+				}
+			}
+
+			if lastVal == nil {
+				lastVal = make([]byte, len(cur))
+			}
+			copy(lastVal, cur)
+		})
+	})
 }
 
 // RemoveAlert stops a conditional watch.
-func (aw *AlertWatcher) RemoveAlert(addr uintptr) error {
-	aw.mu.Lock()
-	defer aw.mu.Unlock()
-
-	e, ok := aw.entries[addr]
-	if !ok {
-		return fmt.Errorf("no alert set for 0x%x", addr)
-	}
-	close(e.stop)
-	delete(aw.entries, addr)
-	return nil
-}
+func (aw *AlertWatcher) RemoveAlert(addr uintptr) error { return aw.pool.Stop(addr) }
 
 // RemoveAll stops all alerts.
-func (aw *AlertWatcher) RemoveAll() {
-	aw.mu.Lock()
-	defer aw.mu.Unlock()
-
-	for addr, e := range aw.entries {
-		close(e.stop)
-		delete(aw.entries, addr)
-	}
-}
+func (aw *AlertWatcher) RemoveAll() { aw.pool.StopAll() }
 
 // List returns all alert addresses.
-func (aw *AlertWatcher) List() []uintptr {
-	aw.mu.Lock()
-	defer aw.mu.Unlock()
-
-	addrs := make([]uintptr, 0, len(aw.entries))
-	for addr := range aw.entries {
-		addrs = append(addrs, addr)
-	}
-	return addrs
-}
+func (aw *AlertWatcher) List() []uintptr { return aw.pool.List() }

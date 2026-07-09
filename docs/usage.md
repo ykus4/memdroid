@@ -9,7 +9,7 @@
 
 ```bash
 go build -o memdroid .
-./memodroid
+./memdroid
 ```
 
 No root on the host is required. All privileged operations run on the device via `adb shell su`.
@@ -17,7 +17,7 @@ No root on the host is required. All privileged operations run on the device via
 ## Connecting a Device
 
 ### USB
-Connect the device and run MemoDroid. It auto-selects if only one device is found.
+Connect the device and run memdroid. It auto-selects if only one device is found.
 If multiple devices are connected, you will be prompted to select one.
 
 ### Wi-Fi ADB
@@ -157,7 +157,7 @@ Switch type with menu `6`. Changing type resets the search session.
 
 ## Web UI
 
-Open `http://localhost:8080` while MemoDroid is running. All features are available.
+Open `http://localhost:8080` while memdroid is running. All features are available.
 
 Special Web UI features:
 - **Watch panel**: real-time value change stream via WebSocket

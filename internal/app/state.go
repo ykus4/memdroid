@@ -3,11 +3,11 @@ package app
 import (
 	"sync"
 
-	"memodroid/internal/driver"
-	"memodroid/internal/memory/modify"
-	"memodroid/internal/memory/search"
-	"memodroid/internal/memory/store"
-	"memodroid/internal/memory/watch"
+	"memdroid/internal/driver"
+	"memdroid/internal/memory/modify"
+	"memdroid/internal/memory/search"
+	"memdroid/internal/memory/store"
+	"memdroid/internal/memory/watch"
 )
 
 // AttachedProcess holds info about an attached process.

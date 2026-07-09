@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"memodroid/internal/app"
-	"memodroid/internal/driver/adb"
-	"memodroid/internal/memory/search"
+	"memdroid/internal/app"
+	"memdroid/internal/driver/adb"
+	"memdroid/internal/memory/search"
 )
 
 func doAttach(st *app.State, pid int, name string) {

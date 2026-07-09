@@ -1,9 +1,21 @@
 # API Reference
 
 All REST endpoints accept and return JSON. POST endpoints read the request body as JSON.
-The WebSocket endpoint is at `/ws/watch`.
+The WebSocket endpoint is at `/ws/watch`. Each endpoint is gated to a single
+HTTP method (GET for reads, POST for mutations); other methods return `405`.
+Request bodies are capped at 1 MiB.
 
-Base URL: `http://localhost:8080`
+Base URL: `http://localhost:8080` (the server binds to loopback by default;
+use `-addr` to change it).
+
+## Authentication
+
+By default there is no auth and the server listens only on `127.0.0.1`. To
+expose it safely, start with `-token <secret>` (or set `MEMDROID_TOKEN`). All
+`/api` and `/ws` requests must then present the token via a `token` query
+parameter, an `Authorization: Bearer <token>` header, or the `mdtoken` cookie.
+Opening `http://<host>:<port>/?token=<secret>` once sets the cookie so the Web
+UI keeps working.
 
 ## Status
 
@@ -57,7 +69,11 @@ Value types: `int32`, `int64`, `float32`, `float64`, `uint32`, `uint64`, `bytes`
 |--------|------|------|-------------|
 | POST | `/api/pointer/scan` | `{"addr":"0x7f...","max_depth":5,"max_offset":2048}` | Find pointer chains to address |
 
-Response: `{"target":"0x...","chains":[{"base":"0x...","label":"libXX.so","offsets":[32,8],"path":"[libXX.so+0x1234]+0x20+0x8"}]}`
+Response: `{"target":"0x...","chains":[{"base":"0x...","label":"libXX.so","base_offset":"0x1234","offsets":[32,8],"path":"[libXX.so+0x1234]+0x20+0x8"}]}`
+
+Offsets are in base→final application order. `/api/pointer/resolve` takes
+`{"label":"libXX.so","base_offset":"0x1234","offsets":[32,8]}` and walks the
+chain in the current process, returning `{"resolved":"0x..."}`.
 
 ## Memory
 

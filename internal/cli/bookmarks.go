@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"memodroid/internal/app"
-	"memodroid/internal/memory/store"
+	"memdroid/internal/app"
+	"memdroid/internal/memory/store"
 )
 
 func BookmarkList(st *app.State) {

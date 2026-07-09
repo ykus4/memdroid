@@ -3,9 +3,9 @@ package cli
 import (
 	"fmt"
 
-	"memodroid/internal/app"
-	"memodroid/internal/driver"
-	"memodroid/internal/memory/search"
+	"memdroid/internal/app"
+	"memdroid/internal/driver"
+	"memdroid/internal/memory/search"
 )
 
 // MaxCandidatesDisplay caps how many search candidates are printed.

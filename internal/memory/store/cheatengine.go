@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"memodroid/internal/memory/search"
+	"memdroid/internal/memory/search"
 )
 
 // ctFile represents the top-level CheatEngine .CT XML structure.
@@ -67,11 +67,11 @@ func parseCTAddress(s string) (uintptr, error) {
 	// Remove quotes if present
 	s = strings.Trim(s, "\"")
 
-	// Handle module+offset like "game.exe+1A2B" — just use the offset
+	// Handle module+offset like "game.exe+1A2B" — keep only the offset.
+	// (A module-relative address can't be represented as an absolute bookmark
+	// without rebasing; this is a known lossy import.)
 	if idx := strings.LastIndex(s, "+"); idx > 0 {
-		// Check if left side looks like a module name (contains non-hex chars)
-		left := s[:idx]
-		if strings.ContainsAny(left, "ghijklmnopqrstuvwxyzGHIJKLMNOPQRSTUVWXYZ._") {
+		if !isHexString(s[:idx]) {
 			s = s[idx+1:]
 		}
 	}
@@ -85,6 +85,21 @@ func parseCTAddress(s string) (uintptr, error) {
 		return 0, fmt.Errorf("invalid address %q: %w", s, err)
 	}
 	return uintptr(v), nil
+}
+
+// isHexString reports whether s is non-empty and consists only of hex digits.
+func isHexString(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		switch {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f', c >= 'A' && c <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // ctVariableType maps CE variable type strings to our ValueType.

@@ -3,7 +3,7 @@ package search
 import (
 	"sync"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // scanWorkers limits concurrent ADB calls during parallel memory reads.
@@ -21,65 +21,43 @@ func (s *Session) SearchFiltered(target []byte, filter driver.RegionFilter, cust
 		return err
 	}
 
-	found := make(map[uintptr][]byte)
-
+	var found map[uintptr][]byte
 	if s.ValueType == TypeBytes {
-		searchBytesInRegions(s.Driver, s.PID, regions, target, found)
+		tlen := len(target)
+		found = scanRegions(s.Driver, s.PID, regions, tlen, func(buf []byte, base uintptr, out map[uintptr][]byte) {
+			for i := 0; i+tlen <= len(buf); i++ {
+				if EqualBytes(buf[i:i+tlen], target) {
+					out[base+uintptr(i)] = cloneBytes(buf[i : i+tlen])
+				}
+			}
+		})
 	} else {
 		size := s.ValueType.Size()
-		var mu sync.Mutex
-		var wg sync.WaitGroup
-		sem := make(chan struct{}, scanWorkers)
-
-		for _, r := range regions {
-			regionSize := int(r.End - r.Start)
-			if regionSize <= 0 {
-				continue
+		found = scanRegions(s.Driver, s.PID, regions, size, func(buf []byte, base uintptr, out map[uintptr][]byte) {
+			for i := 0; i+size <= len(buf); i += size {
+				if EqualBytes(buf[i:i+size], target) {
+					out[base+uintptr(i)] = cloneBytes(buf[i : i+size])
+				}
 			}
-			wg.Add(1)
-			sem <- struct{}{}
-			go func(r driver.Region, regionSize int) {
-				defer wg.Done()
-				defer func() { <-sem }()
-
-				buf, err := s.Driver.ReadRegion(s.PID, r.Start, regionSize)
-				if err != nil {
-					return
-				}
-				local := make(map[uintptr][]byte)
-				for i := 0; i+size <= len(buf); i += size {
-					if EqualBytes(buf[i:i+size], target) {
-						cp := make([]byte, size)
-						copy(cp, buf[i:i+size])
-						local[r.Start+uintptr(i)] = cp
-					}
-				}
-				if len(local) > 0 {
-					mu.Lock()
-					for addr, val := range local {
-						found[addr] = val
-					}
-					mu.Unlock()
-				}
-			}(r, regionSize)
-		}
-		wg.Wait()
+		})
 	}
 
-	s.Candidates = found
-	s.active = true
+	s.replace(found)
 	return nil
 }
 
-func searchBytesInRegions(drv driver.Driver, pid int, regions []driver.Region, target []byte, found map[uintptr][]byte) {
-	tlen := len(target)
+// scanRegions reads each region once (in parallel, bounded by scanWorkers) and
+// invokes scan on the resulting buffer to collect matches. Regions smaller than
+// minSize are skipped. It is the shared engine for value and byte-sequence scans.
+func scanRegions(drv driver.Driver, pid int, regions []driver.Region, minSize int, scan func(buf []byte, base uintptr, out map[uintptr][]byte)) map[uintptr][]byte {
+	found := make(map[uintptr][]byte)
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, scanWorkers)
 
 	for _, r := range regions {
 		size := int(r.End - r.Start)
-		if size <= 0 || size < tlen {
+		if size <= 0 || size < minSize {
 			continue
 		}
 		wg.Add(1)
@@ -93,13 +71,7 @@ func searchBytesInRegions(drv driver.Driver, pid int, regions []driver.Region, t
 				return
 			}
 			local := make(map[uintptr][]byte)
-			for i := 0; i <= len(buf)-tlen; i++ {
-				if EqualBytes(buf[i:i+tlen], target) {
-					cp := make([]byte, tlen)
-					copy(cp, target)
-					local[r.Start+uintptr(i)] = cp
-				}
-			}
+			scan(buf, r.Start, local)
 			if len(local) > 0 {
 				mu.Lock()
 				for addr, val := range local {
@@ -110,4 +82,11 @@ func searchBytesInRegions(drv driver.Driver, pid int, regions []driver.Region, t
 		}(r, size)
 	}
 	wg.Wait()
+	return found
+}
+
+func cloneBytes(b []byte) []byte {
+	cp := make([]byte, len(b))
+	copy(cp, b)
+	return cp
 }

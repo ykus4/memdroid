@@ -1,59 +1,67 @@
 package modify
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 const (
-	dumpWordSize = 8
-	dumpASCIIMin = 0x20
-	dumpASCIIMax = 0x7e
+	dumpLineWidth = 16
+	dumpASCIIMin  = 0x20
+	dumpASCIIMax  = 0x7e
 )
 
-// DumpRegion reads size bytes from addr and writes a hex dump to path.
+// DumpRegion reads size bytes from addr in one bulk transfer and writes a
+// classic 16-byte-per-line hex dump to path.
 func DumpRegion(drv driver.Driver, pid int, addr uintptr, size int, path string) error {
+	if size <= 0 {
+		return fmt.Errorf("dump size must be positive, got %d", size)
+	}
+
+	data, err := drv.ReadRegion(pid, addr, size)
+	if err != nil {
+		return fmt.Errorf("dump 0x%x: %w", addr, err)
+	}
+
 	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = f.Close() }()
 
-	for offset := 0; offset < size; offset += dumpWordSize {
-		remaining := size - offset
-		if remaining > dumpWordSize {
-			remaining = dumpWordSize
+	w := bufio.NewWriter(f)
+	for offset := 0; offset < len(data); offset += dumpLineWidth {
+		end := offset + dumpLineWidth
+		if end > len(data) {
+			end = len(data)
 		}
-
-		data, err := drv.Peek(pid, addr+uintptr(offset), remaining)
-		if err != nil {
-			_, _ = fmt.Fprintf(f, "%016x  !! read error: %v\n", addr+uintptr(offset), err)
-			continue
-		}
-
-		_, _ = fmt.Fprintf(f, "%016x  ", addr+uintptr(offset))
-		for i, b := range data {
-			_, _ = fmt.Fprintf(f, "%02x ", b)
-			if i == dumpWordSize/2-1 {
-				_, _ = fmt.Fprintf(f, " ")
-			}
-		}
-		for i := len(data); i < dumpWordSize; i++ {
-			_, _ = fmt.Fprintf(f, "   ")
-		}
-		_, _ = fmt.Fprintf(f, " |")
-		for _, b := range data {
-			if b >= dumpASCIIMin && b <= dumpASCIIMax {
-				_, _ = fmt.Fprintf(f, "%c", b)
-			} else {
-				_, _ = fmt.Fprintf(f, ".")
-			}
-		}
-		_, _ = fmt.Fprintf(f, "|\n")
+		writeHexLine(w, addr+uintptr(offset), data[offset:end])
 	}
+	return w.Flush()
+}
 
-	fmt.Printf("Dumped %d bytes from 0x%x to %s\n", size, addr, path)
-	return nil
+func writeHexLine(w *bufio.Writer, addr uintptr, chunk []byte) {
+	_, _ = fmt.Fprintf(w, "%016x  ", addr)
+	for i := 0; i < dumpLineWidth; i++ {
+		if i < len(chunk) {
+			_, _ = fmt.Fprintf(w, "%02x ", chunk[i])
+		} else {
+			_, _ = w.WriteString("   ")
+		}
+		if i == dumpLineWidth/2-1 {
+			_, _ = w.WriteString(" ")
+		}
+	}
+	_, _ = w.WriteString(" |")
+	for _, b := range chunk {
+		if b >= dumpASCIIMin && b <= dumpASCIIMax {
+			_ = w.WriteByte(b)
+		} else {
+			_ = w.WriteByte('.')
+		}
+	}
+	_, _ = w.WriteString("|\n")
 }

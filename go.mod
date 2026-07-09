@@ -1,4 +1,4 @@
-module memodroid
+module memdroid
 
 go 1.26
 

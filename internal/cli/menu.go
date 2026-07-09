@@ -3,12 +3,12 @@ package cli
 import (
 	"fmt"
 
-	"memodroid/internal/app"
-	"memodroid/internal/driver/adb"
+	"memdroid/internal/app"
+	"memdroid/internal/driver/adb"
 )
 
-// ServerAddr is displayed in the menu header. Set by the caller before rendering.
-var ServerAddr = ":8080"
+// ServerURL is displayed in the menu header. Set by the caller before rendering.
+var ServerURL = "http://localhost:8080"
 
 type menuSection struct {
 	title string
@@ -96,7 +96,7 @@ func PrintMenu(st *app.State, d *adb.ADB) {
 	vt := st.GetValueType()
 	sess := st.GetSession()
 
-	fmt.Println("\n=== MemoDroid ===")
+	fmt.Println("\n=== memdroid ===")
 	serial := d.DeviceSerial()
 	if serial == "" {
 		serial = "(none)"
@@ -112,7 +112,7 @@ func PrintMenu(st *app.State, d *adb.ADB) {
 		}
 		fmt.Println()
 	}
-	fmt.Printf("Web UI: http://localhost%s\n", ServerAddr)
+	fmt.Printf("Web UI: %s\n", ServerURL)
 	for _, section := range menu {
 		fmt.Printf("--- %s ---\n", section.title)
 		for _, it := range section.items {

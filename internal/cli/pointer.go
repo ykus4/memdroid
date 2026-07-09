@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"memodroid/internal/app"
-	"memodroid/internal/memory/pointer"
+	"memdroid/internal/app"
+	"memdroid/internal/memory/pointer"
 )
 
 func PointerScan(st *app.State) {
@@ -50,6 +50,15 @@ func PointerResolve(st *app.State) {
 		fmt.Println("Module name required")
 		return
 	}
+	var baseOffset uintptr
+	if s := Prompt("Base offset (hex, e.g. 0x1234): "); s != "" {
+		v, err := strconv.ParseUint(strings.TrimPrefix(s, "0x"), 16, 64)
+		if err != nil {
+			fmt.Println("Invalid base offset")
+			return
+		}
+		baseOffset = uintptr(v)
+	}
 	offsetsStr := Prompt("Offsets (comma-separated hex, e.g. 0x10,0x20,0x8): ")
 	if offsetsStr == "" {
 		fmt.Println("Offsets required")
@@ -61,8 +70,9 @@ func PointerResolve(st *app.State) {
 		return
 	}
 	chain := pointer.Chain{
-		BaseLabel: label,
-		Offsets:   offsets,
+		BaseLabel:  label,
+		BaseOffset: baseOffset,
+		Offsets:    offsets,
 	}
 	resolved, err := pointer.ResolveChain(st.GetDriver(), st.GetPID(), chain)
 	if err != nil {

@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 type FilterMode int
@@ -18,9 +18,16 @@ const (
 	FilterValue
 )
 
+func (m FilterMode) valid() bool {
+	return m >= FilterChanged && m <= FilterValue
+}
+
 // Filter narrows the candidate list by re-reading current values and applying mode.
 // For FilterValue, pass the target bytes; otherwise target may be nil.
 func (s *Session) Filter(mode FilterMode, target []byte) error {
+	if !mode.valid() {
+		return fmt.Errorf("invalid filter mode %d", mode)
+	}
 	if !s.HasCandidates() {
 		return fmt.Errorf("no active search session")
 	}
@@ -34,61 +41,54 @@ func (s *Session) Filter(mode FilterMode, target []byte) error {
 	if err != nil {
 		return fmt.Errorf("filter: read maps: %w", err)
 	}
+	sort.Slice(regions, func(i, j int) bool { return regions[i].Start < regions[j].Start })
 
-	type regionData struct {
-		start uintptr
-		buf   []byte
-	}
-
-	// Determine which regions contain candidates so we only read those.
-	type candEntry struct {
-		addr uintptr
-		prev []byte
-	}
-	entries := make([]candEntry, 0, len(s.Candidates))
-	for addr, prev := range s.Candidates {
-		entries = append(entries, candEntry{addr, prev})
-	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].addr < entries[j].addr })
-
-	regionFor := func(addr uintptr) (int, *driver.Region) {
-		for i := range regions {
-			if addr >= regions[i].Start && addr < regions[i].End {
-				return i, &regions[i]
-			}
+	// regionFor binary-searches the sorted region list for the region containing addr.
+	regionFor := func(addr uintptr) int {
+		i := sort.Search(len(regions), func(k int) bool { return regions[k].Start > addr }) - 1
+		if i >= 0 && addr < regions[i].End {
+			return i
 		}
-		return -1, nil
+		return -1
 	}
 
-	// Identify needed regions.
+	// Gather candidates in address order and record which regions to read.
+	type candEntry struct {
+		addr   uintptr
+		prev   []byte
+		regIdx int
+	}
+	snap := s.Snapshot()
+	entries := make([]candEntry, 0, len(snap))
 	needed := make(map[int]struct{})
-	for _, e := range entries {
-		if idx, _ := regionFor(e.addr); idx >= 0 {
+	for addr, prev := range snap {
+		idx := regionFor(addr)
+		entries = append(entries, candEntry{addr: addr, prev: prev, regIdx: idx})
+		if idx >= 0 {
 			needed[idx] = struct{}{}
 		}
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].addr < entries[j].addr })
 
 	// Pre-load needed regions in parallel.
-	cache := make(map[int]*regionData)
+	cache := make(map[int][]byte)
 	var cacheMu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, scanWorkers)
-
 	for idx := range needed {
 		idx := idx
-		r := &regions[idx]
 		wg.Add(1)
 		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			r := regions[idx]
 			buf, readErr := s.Driver.ReadRegion(s.PID, r.Start, int(r.End-r.Start))
-			cacheMu.Lock()
 			if readErr != nil {
-				cache[idx] = nil
-			} else {
-				cache[idx] = &regionData{start: r.Start, buf: buf}
+				return
 			}
+			cacheMu.Lock()
+			cache[idx] = buf
 			cacheMu.Unlock()
 		}()
 	}
@@ -101,44 +101,53 @@ func (s *Session) Filter(mode FilterMode, target []byte) error {
 			sz = len(e.prev)
 		}
 
-		idx, _ := regionFor(e.addr)
-		var cur []byte
-		if idx >= 0 {
-			if d := cache[idx]; d != nil {
-				off := int(e.addr - d.start)
-				if off >= 0 && off+sz <= len(d.buf) {
-					cur = d.buf[off : off+sz]
-				}
-			}
-		}
+		cur := sliceFromCache(cache, regions, e.regIdx, e.addr, sz)
 		if cur == nil {
-			cur, err = s.Driver.Peek(s.PID, e.addr, sz)
-			if err != nil {
+			c, readErr := s.Driver.Peek(s.PID, e.addr, sz)
+			if readErr != nil {
 				continue
 			}
+			cur = c
 		}
 
-		var keep bool
-		switch mode {
-		case FilterChanged:
-			keep = !EqualBytes(cur, e.prev)
-		case FilterUnchanged:
-			keep = EqualBytes(cur, e.prev)
-		case FilterIncreased:
-			keep = CompareValues(cur, e.prev, s.ValueType) > 0
-		case FilterDecreased:
-			keep = CompareValues(cur, e.prev, s.ValueType) < 0
-		case FilterValue:
-			keep = EqualBytes(cur, target)
-		}
-
-		if keep {
-			cp := make([]byte, sz)
-			copy(cp, cur)
-			next[e.addr] = cp
+		if filterKeep(mode, cur, e.prev, target, s.ValueType) {
+			next[e.addr] = cloneBytes(cur)
 		}
 	}
 
-	s.Candidates = next
+	s.replace(next)
 	return nil
+}
+
+// sliceFromCache returns the sz bytes at addr from the cached region buffer, or
+// nil if the region was not cached or the slice would fall out of bounds.
+func sliceFromCache(cache map[int][]byte, regions []driver.Region, idx int, addr uintptr, sz int) []byte {
+	if idx < 0 {
+		return nil
+	}
+	buf, ok := cache[idx]
+	if !ok {
+		return nil
+	}
+	off := int(addr - regions[idx].Start)
+	if off < 0 || off+sz > len(buf) {
+		return nil
+	}
+	return buf[off : off+sz]
+}
+
+func filterKeep(mode FilterMode, cur, prev, target []byte, vt ValueType) bool {
+	switch mode {
+	case FilterChanged:
+		return !EqualBytes(cur, prev)
+	case FilterUnchanged:
+		return EqualBytes(cur, prev)
+	case FilterIncreased:
+		return CompareValues(cur, prev, vt) > 0
+	case FilterDecreased:
+		return CompareValues(cur, prev, vt) < 0
+	case FilterValue:
+		return EqualBytes(cur, target)
+	}
+	return false
 }

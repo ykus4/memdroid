@@ -3,7 +3,7 @@ package process
 import (
 	"fmt"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // ProcessInfo mirrors driver.ProcessInfo with JSON tags for the HTTP API.

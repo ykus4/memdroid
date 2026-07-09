@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"memodroid/internal/driver"
+	"memdroid/internal/driver"
 )
 
 // execErr enriches an exec error with the stderr output from the failed command.
