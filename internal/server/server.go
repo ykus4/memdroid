@@ -133,7 +133,8 @@ func post(fn http.HandlerFunc) http.HandlerFunc {
 
 func method(verb string, fn http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != verb && !(verb == http.MethodGet && r.Method == http.MethodHead) {
+		allowed := r.Method == verb || (verb == http.MethodGet && r.Method == http.MethodHead)
+		if !allowed {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
