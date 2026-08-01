@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -43,17 +44,24 @@ type AlertEvent struct {
 	Triggered bool // whether an action was taken
 }
 
-// AlertWatcher manages conditional watches with automatic actions.
-// OnAlert is invoked from watcher goroutines and must be safe for concurrent use.
+// AlertWatcher manages conditional watches with automatic actions. Listeners
+// are invoked from watcher goroutines and must be safe for concurrent use.
 type AlertWatcher struct {
 	pool    *poller.Pool
-	OnAlert func(AlertEvent)
+	onAlert listeners[AlertEvent]
 }
 
 func NewAlertWatcher() *AlertWatcher {
 	return &AlertWatcher{pool: poller.New()}
 }
 
+// OnAlert registers fn to receive every alert event and returns a function that
+// unregisters it.
+func (aw *AlertWatcher) OnAlert(fn func(AlertEvent)) (remove func()) {
+	return aw.onAlert.add(fn)
+}
+
+// ParseAlertCondition accepts either the long name or its comparison operator.
 func ParseAlertCondition(s string) (AlertCondition, error) {
 	switch s {
 	case "above", ">":
@@ -62,9 +70,8 @@ func ParseAlertCondition(s string) (AlertCondition, error) {
 		return AlertBelow, nil
 	case "changed", "!=":
 		return AlertChanged, nil
-	default:
-		return 0, fmt.Errorf("unknown condition: %s (use: above, below, changed)", s)
 	}
+	return 0, fmt.Errorf("unknown condition %q (use: above, below, changed)", s)
 }
 
 func (c AlertCondition) String() string {
@@ -75,9 +82,27 @@ func (c AlertCondition) String() string {
 		return "below"
 	case AlertChanged:
 		return "changed"
-	default:
-		return "?"
 	}
+	return "unknown"
+}
+
+// ParseAlertAction converts an API/CLI name to an AlertAction. The empty string
+// defaults to notify-only.
+func ParseAlertAction(s string) (AlertAction, error) {
+	switch s {
+	case "", "notify":
+		return ActionNotify, nil
+	case "write":
+		return ActionWrite, nil
+	}
+	return 0, fmt.Errorf("unknown action %q (use: notify, write)", s)
+}
+
+func (a AlertAction) String() string {
+	if a == ActionWrite {
+		return "write"
+	}
+	return "notify"
 }
 
 // WatchWithAlert starts a conditional watch. When the condition fires, the
@@ -91,8 +116,16 @@ func (aw *AlertWatcher) WatchWithAlert(drv driver.Driver, pid int, vt search.Val
 		return fmt.Errorf("threshold too short for %s (need %d bytes)", vt, size)
 	}
 
+	// Read the baseline before the goroutine starts, exactly as Watch does.
+	// Seeding it on the first tick instead would drop any change that landed
+	// between registration and that tick, making AlertChanged timing-dependent.
+	initial, err := drv.Peek(pid, cfg.Addr, size)
+	if err != nil {
+		return fmt.Errorf("alert: initial read failed: %w", err)
+	}
+
 	return aw.pool.Start(cfg.Addr, func(stop <-chan struct{}) {
-		var lastVal []byte
+		lastVal := bytes.Clone(initial)
 		poller.EveryTick(interval, stop, func() {
 			cur, err := drv.Peek(pid, cfg.Addr, size)
 			if err != nil {
@@ -106,7 +139,7 @@ func (aw *AlertWatcher) WatchWithAlert(drv driver.Driver, pid int, vt search.Val
 			case AlertBelow:
 				fired = search.CompareValues(cur, cfg.Threshold, vt) < 0
 			case AlertChanged:
-				fired = lastVal != nil && !search.EqualBytes(cur, lastVal)
+				fired = !bytes.Equal(cur, lastVal)
 			}
 
 			if fired {
@@ -115,20 +148,15 @@ func (aw *AlertWatcher) WatchWithAlert(drv driver.Driver, pid int, vt search.Val
 					_ = drv.Poke(pid, cfg.Addr, cfg.WriteVal)
 					triggered = true
 				}
-				if aw.OnAlert != nil {
-					aw.OnAlert(AlertEvent{
-						Addr:      cfg.Addr,
-						Condition: cfg.Condition.String(),
-						Value:     search.FormatValue(cur, vt),
-						Triggered: triggered,
-					})
-				}
+				aw.onAlert.emit(AlertEvent{
+					Addr:      cfg.Addr,
+					Condition: cfg.Condition.String(),
+					Value:     search.FormatValue(cur, vt),
+					Triggered: triggered,
+				})
 			}
 
-			if lastVal == nil {
-				lastVal = make([]byte, len(cur))
-			}
-			copy(lastVal, cur)
+			lastVal = bytes.Clone(cur)
 		})
 	})
 }

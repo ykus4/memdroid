@@ -14,7 +14,7 @@ func BookmarkList(st *app.State) {
 		return
 	}
 	vals := bl.Values(st.GetDriver(), st.GetPID())
-	for i, b := range bl.Entries {
+	for i, b := range bl.Entries() {
 		fmt.Printf("[%d] 0x%x  %-20s  %s = %s\n", i, b.Addr, b.Label, b.VType, vals[b.Addr])
 	}
 }

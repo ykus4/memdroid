@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -16,15 +17,23 @@ type ChangeEvent struct {
 	Cur  string
 }
 
-// Watcher monitors a set of addresses and fires OnChange when a value changes.
-// OnChange is invoked from watcher goroutines and must be safe for concurrent use.
+// Watcher monitors a set of addresses and notifies its listeners when a value
+// changes. Listeners are invoked from watcher goroutines and must be safe for
+// concurrent use.
 type Watcher struct {
 	pool     *poller.Pool
-	OnChange func(ChangeEvent)
+	onChange listeners[ChangeEvent]
 }
 
 func NewWatcher() *Watcher {
 	return &Watcher{pool: poller.New()}
+}
+
+// OnChange registers fn to receive every change event and returns a function
+// that unregisters it. Multiple consumers (CLI output, WebSocket push) can
+// subscribe at once.
+func (w *Watcher) OnChange(fn func(ChangeEvent)) (remove func()) {
+	return w.onChange.add(fn)
 }
 
 // Watch polls addr every interval and calls OnChange when the value changes.
@@ -40,8 +49,7 @@ func (w *Watcher) Watch(drv driver.Driver, pid int, addr uintptr, vt search.Valu
 	if err != nil {
 		return fmt.Errorf("watch: initial read failed: %w", err)
 	}
-	last := make([]byte, len(initial))
-	copy(last, initial)
+	last := bytes.Clone(initial)
 
 	return w.pool.Start(addr, func(stop <-chan struct{}) {
 		poller.EveryTick(interval, stop, func() {
@@ -49,17 +57,18 @@ func (w *Watcher) Watch(drv driver.Driver, pid int, addr uintptr, vt search.Valu
 			if err != nil {
 				return
 			}
-			if search.EqualBytes(cur, last) {
+			if bytes.Equal(cur, last) {
 				return
 			}
-			if w.OnChange != nil {
-				w.OnChange(ChangeEvent{
-					Addr: addr,
-					Prev: search.FormatValue(last, vt),
-					Cur:  search.FormatValue(cur, vt),
-				})
-			}
-			copy(last, cur)
+			w.onChange.emit(ChangeEvent{
+				Addr: addr,
+				Prev: search.FormatValue(last, vt),
+				Cur:  search.FormatValue(cur, vt),
+			})
+			// Clone rather than copy: a short read at a remapped boundary
+			// returns fewer bytes, and copy would leave stale trailing bytes
+			// in last, so it could never compare equal again.
+			last = bytes.Clone(cur)
 		})
 	})
 }

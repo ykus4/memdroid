@@ -14,6 +14,20 @@ go build -o memdroid .
 
 No root on the host is required. All privileged operations run on the device via `adb shell su`.
 
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-addr` | `127.0.0.1:8080` | Listen address for the Web UI and API |
+| `-token` | `$MEMDROID_TOKEN` | Require this token on `/api` and `/ws`; empty means no auth |
+| `-file-root` | `.` | Confine API file reads/writes to this directory; empty disables the restriction |
+
+Binding `-addr` to anything other than loopback without a `-token` hands root
+memory access to the whole network, and memdroid prints a warning when you do.
+
+`-file-root` only affects the HTTP API — the interactive CLI is unrestricted,
+since it is already running as you.
+
 ## Connecting a Device
 
 ### USB
@@ -45,24 +59,29 @@ adb connect 192.168.1.5:5555
  1s. Attach by Name      15. Modify Address
   2. Attach by PID       16. Undo Last Modify
   3. Detach              17. Freeze Address
-  4. Stop Process       17a. Freeze All Candidates
-  5. Continue Process    18. Unfreeze Address
-                         19. List Frozen
---- Search ---           20. Watch Address
-  6. Set Value Type      21. Unwatch Address
-  7. Search Value        22. List Watched
- 7r. Search (Region)     23. Dump Memory Region
-  8. Filter: Changed    23m. Show Memory Maps
-  9. Filter: Unchanged
- 10. Filter: Increased   --- Pointer ---
- 11. Filter: Decreased    pt. Pointer Scan
+ 3s. Switch Process     17i. Set Freeze Interval
+ 3l. List Attached      17a. Freeze All Candidates
+  4. Stop Process        18. Unfreeze Address
+  5. Continue Process    19. List Frozen
+                         20. Watch Address
+--- Search ---           21. Unwatch Address
+  6. Set Value Type      22. List Watched
+  7. Search Value       22a. Set Alert
+ 7r. Search (Region)    22r. Remove Alert
+  8. Filter: Changed    22l. List Alerts
+  9. Filter: Unchanged   23. Dump Memory Region
+ 10. Filter: Increased  23d. Snapshot Diff
+ 11. Filter: Decreased  23m. Show Memory Maps
  12. Filter: Exact Val
- 13. Show Candidates     --- Bookmarks ---
- 14. Reset Search        24. Add Bookmark
-                         25. List Bookmarks
---- Session ---          26. Modify All Bookmarks
- 28. Save State          27. Remove Bookmark
- 29. Load State
+ 13. Show Candidates    --- Pointer ---
+ 14. Reset Search        pt. Pointer Scan
+                         pr. Resolve Pointer Chain
+--- Import ---
+ ct. Import .CT file    --- Bookmarks ---
+                         24. Add Bookmark
+--- Session ---          25. List Bookmarks
+ 28. Save State          26. Modify All Bookmarks
+ 29. Load State          27. Remove Bookmark
 ```
 
 ## Typical Workflows

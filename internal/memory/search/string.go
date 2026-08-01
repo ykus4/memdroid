@@ -1,44 +1,64 @@
 package search
 
 import (
+	"encoding/binary"
 	"fmt"
 	"unicode/utf16"
 
 	"memdroid/internal/driver"
 )
 
-// SearchStringUTF8 scans memory for an exact UTF-8 string match.
-func SearchStringUTF8(drv driver.Driver, pid int, s string) ([]uintptr, error) {
-	if s == "" {
-		return nil, fmt.Errorf("empty string")
+// StringEncoding selects how a string is laid out in target memory.
+type StringEncoding int
+
+const (
+	EncodingUTF8 StringEncoding = iota
+	EncodingUTF16LE
+)
+
+// ParseStringEncoding converts an API/CLI name to a StringEncoding. The empty
+// string defaults to UTF-8.
+func ParseStringEncoding(s string) (StringEncoding, error) {
+	switch s {
+	case "", "utf8", "utf-8":
+		return EncodingUTF8, nil
+	case "utf16", "utf-16", "utf16le", "utf-16le":
+		return EncodingUTF16LE, nil
 	}
-	return SearchPattern(drv, pid, bytesToPattern([]byte(s)))
+	return 0, fmt.Errorf("unknown string encoding %q (use utf8 or utf16)", s)
 }
 
-// SearchStringUTF16 scans memory for a UTF-16LE encoded string match.
-func SearchStringUTF16(drv driver.Driver, pid int, s string) ([]uintptr, error) {
-	if s == "" {
-		return nil, fmt.Errorf("empty string")
+func (e StringEncoding) String() string {
+	if e == EncodingUTF16LE {
+		return "utf16le"
 	}
-	return SearchPattern(drv, pid, bytesToPattern(StringBytes(s, true)))
+	return "utf8"
 }
 
-// StringBytes encodes s as UTF-8 (utf16le=false) or UTF-16LE (utf16le=true).
-func StringBytes(s string, utf16le bool) []byte {
-	if !utf16le {
+// StringBytes encodes s in the given encoding.
+func StringBytes(s string, enc StringEncoding) []byte {
+	if enc != EncodingUTF16LE {
 		return []byte(s)
 	}
-	encoded := utf16.Encode([]rune(s))
-	buf := make([]byte, len(encoded)*2)
-	for i, u := range encoded {
-		buf[i*2] = byte(u)
-		buf[i*2+1] = byte(u >> 8)
+	units := utf16.Encode([]rune(s))
+	buf := make([]byte, len(units)*2)
+	for i, u := range units {
+		binary.LittleEndian.PutUint16(buf[i*2:], u)
 	}
 	return buf
 }
 
-func bytesToPattern(b []byte) []PatternByte {
-	p := make([]PatternByte, len(b))
+// SearchString scans memory for an exact string match in the given encoding.
+func SearchString(drv driver.Driver, pid int, s string, enc StringEncoding) (PatternResult, error) {
+	if s == "" {
+		return PatternResult{}, fmt.Errorf("empty string")
+	}
+	return SearchPattern(drv, pid, literalPattern(StringBytes(s, enc)))
+}
+
+// literalPattern turns raw bytes into a wildcard-free Pattern.
+func literalPattern(b []byte) Pattern {
+	p := make(Pattern, len(b))
 	for i, v := range b {
 		p[i] = PatternByte{Value: v}
 	}

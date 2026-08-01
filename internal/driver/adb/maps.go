@@ -48,9 +48,12 @@ func parseMapsLine(line string) (driver.Region, bool) {
 		return driver.Region{}, false
 	}
 
+	// The pathname column is last and may contain spaces — real Android maps
+	// include entries like "[anon:dalvik-main space]" — so rejoin the tail
+	// rather than taking fields[5] alone.
 	name := ""
 	if len(fields) >= 6 {
-		name = fields[5]
+		name = strings.Join(fields[5:], " ")
 	}
 	return driver.Region{Start: uintptr(startHex), End: uintptr(endHex), Name: name}, true
 }
