@@ -27,14 +27,16 @@ internal/
 │       ├── process.go     # ListProcesses, FindProcessByName, Attach, Detach, Stop, Continue
 │       ├── maps.go        # ReadMaps, ReadMapsFiltered — /proc/<pid>/maps parser
 │       └── mem.go         # Peek, Poke, ReadBytes — /proc/<pid>/mem via dd + base64
-├── process/
-│   ├── list.go            # ProcessList() — delegates to Driver
-│   └── control.go         # Attach/Detach/Stop/Continue — thin wrappers
+├── driver/drivertest/
+│   └── fake.go            # In-memory driver.Driver for tests (no device needed)
 ├── server/
-│   ├── server.go          # HTTP server, route registration, WebSocket wire-up
-│   ├── handlers.go        # REST API handlers
+│   ├── server.go          # Server lifecycle, auth, origin checks, URL helpers
+│   ├── routes.go          # The route table (path → method → handler)
+│   ├── handler.go         # Shared handler plumbing: JSON, hexAddr, validation
+│   ├── paths.go           # Confines client-supplied file paths to -file-root
+│   ├── handlers_*.go      # Endpoints, one file per resource
 │   ├── wswatch/
-│   │   └── wswatch.go     # WebSocket broadcast hub for watch events
+│   │   └── wswatch.go     # WebSocket broadcast Hub for watch/alert events
 │   └── static/
 │       └── index.html     # Single-page Web UI
 └── memory/
@@ -56,7 +58,8 @@ internal/
     │   └── dump.go        # Hex dump memory region to file (bulk ReadRegion)
     ├── watch/
     │   ├── watch.go       # Watcher — poll for value change, backed by poller.Pool
-    │   └── alert.go       # AlertWatcher — conditional watch + auto-write
+    │   ├── alert.go       # AlertWatcher — conditional watch + auto-write
+    │   └── listeners.go   # Generic fan-out registry for watch/alert events
     └── store/
         ├── bookmark.go    # Named address bookmarks with bulk modify
         ├── cheatengine.go # Import CheatEngine .CT tables as bookmarks
@@ -69,10 +72,17 @@ internal/poller/
 ## CLI Source Layout
 
 The interactive menu lives in `package cli` under `internal/cli/`, one file per
-concern (`run.go` dispatch loop, `prompt.go` input helpers, `device.go`,
+concern (`run.go` actions, `prompt.go` input helpers, `device.go`,
 `process.go`, `search.go`, `memory.go`, `pointer.go`, `alert.go`,
 `bookmarks.go`, `menu.go`). `main.go` wires flags, the ADB driver, shared
 state, and the HTTP server, then hands off to `cli.Run`.
+
+`menu.go` holds the menu as a single table where each entry carries its key,
+its label **and** its action. Dispatch indexes that same table, so a menu entry
+can never exist without a handler (or vice versa), and a duplicate key panics
+at startup rather than silently shadowing. Guards like `attached(...)` and
+`withSession(...)` wrap an action instead of each action re-checking
+preconditions.
 
 ## Dependency Graph
 
@@ -81,13 +91,13 @@ main
  ├── app.State
  ├── cli
  ├── driver/adb              (no internal deps — exec.Command("adb", ...) only)
- ├── process                 → driver
+ ├── driver/drivertest       → driver               (test fake)
  ├── server                  → app, driver, driver/adb, memory/*, server/wswatch
  ├── memory/search           → driver
  ├── memory/pointer          → driver
  ├── memory/modify           → driver, memory/search, poller
  ├── memory/watch            → driver, memory/search, poller
- └── memory/store            → memory/search
+ └── memory/store            → driver, memory/search
 ```
 
 No circular imports.
@@ -134,23 +144,46 @@ from the host side over ADB.
 Both the CLI goroutine and all HTTP handler goroutines read/write through it.
 
 ```
-State.GetDriver()   → current ADB driver
-State.GetSession()  → current search session (nil if not attached)
-State.GetPID()      → attached PID (0 if none)
+State.GetDriver()     → current ADB driver
+State.GetSession()    → current search session (nil if not attached)
+State.GetPID()        → attached PID (0 if none)
+State.NewSession(pid) → replace the session with a fresh one
 State.EnsureSession() → creates session if nil
+State.Detach()        → unfreeze/unwatch, detach, promote the next process
 ```
+
+`State.Detach()` exists because the CLI and the API both need exactly that
+sequence; keeping it in one place stops the two paths from drifting.
+
+### Value Type Ownership
+
+The active value type has exactly one owner at a time. Before a session exists,
+`State` holds it; once a session exists, the **session** owns it and
+`State.GetValueType()` delegates. `State.SetValueType` propagates into the live
+session, and `Session.SetType` discards existing candidates because they were
+recorded at a different byte width.
+
+This matters because a scan and the formatting of its results must agree on the
+width. Storing the type in two places let them disagree: setting the type over
+the API updated `State` while the session kept scanning at the old width.
 
 ### Search Session
 
-`Session` holds `map[uintptr][]byte` (address → last-seen value bytes).
+`Session` holds `map[uintptr][]byte` (address → last-seen value bytes). All
+fields are unexported and mutex-guarded; long scans do their I/O without
+holding the lock and take it only to swap in the finished result.
 
 ```
 Session.Search(target)               → full scan, reset candidate map
 Session.SearchFiltered(target, ...)  → restricted to a region type
 Session.Filter(mode, ...)            → re-read each candidate, drop non-matching
-Session.Snapshot()                   → safe copy for concurrent reads
+Session.Page(offset, limit)          → one sorted page, without copying the rest
+Session.Snapshot()                   → deep copy for concurrent reads
 Session.Reset()                      → clear all candidates
 ```
+
+`Page` exists so the API can serve `/api/search/candidates` without deep-copying
+a multi-million-entry candidate map on every request.
 
 ### Pointer Scan Algorithm
 
@@ -162,12 +195,23 @@ Session.Reset()                      → clear all candidates
    - If yes, record the chain; if not, recurse deeper
 4. Return all found chains as `[]Chain{BaseAddr, BaseLabel, Offsets, FinalAddr}`
 
-### WebSocket Watch Events
+### Watch Event Fan-out
 
-`watch.BroadcastFunc` is a package-level function variable set by `server.Start`.
-When a watched value changes, `watch.go` calls `BroadcastFunc(addr, prev, cur)`,
-which calls `wswatch.Broadcast`. The `wswatch` hub fans the JSON event out to all
-connected `WebSocket` clients. The Web UI Watch panel receives and displays these.
+`Watcher` and `AlertWatcher` expose `OnChange` / `OnAlert` as **registrations**
+that return an unsubscribe func, backed by the generic `listeners[T]` registry:
+
+```go
+remove := state.Watcher.OnChange(func(ev watch.ChangeEvent) { ... })
+```
+
+Watch events have two consumers — the CLI prints them, and the server forwards
+them to `wswatch.Hub` for the browser — and they are wired up from different
+goroutines at startup. A single assignable callback field let whichever side
+registered last silently win (the server's registration clobbered the CLI's),
+and was raced on by the polling goroutines that invoked it.
+
+`wswatch.Hub` is a value rather than package state, so a test — or a second
+server — gets its own client set.
 
 ### Freeze / Watch Goroutines
 
@@ -185,22 +229,58 @@ for {
 
 `UnfreezeAll` / `UnwatchAll` close all stop channels. These are called on detach and exit.
 
-### Bulk Region Reads (Search & Filter)
+### The Shared Scan Engine
 
-`SearchFiltered` and `Filter` call `ReadRegion` once per memory region rather than
-`Peek` once per candidate address. A full scan issues ~50 `adb shell` round-trips
-(one per rw region) instead of millions, bringing scan time from hours to seconds.
+Value, byte-sequence, pattern and string scans all run through one function,
+`search.scanRegions`. It reads each region via `ReadRegion` — one `adb shell`
+round-trip per 32 MiB rather than one per address — fans regions out across
+`scanWorkers` goroutines, and merges the per-worker match maps at the end.
 
-`ReadRegion` splits large regions into 32 MB chunks internally so the base64 payload
-stays within shell buffer limits; callers see a single contiguous byte slice.
+A full scan issues ~50 round-trips (one per rw region) instead of millions,
+bringing scan time from hours to seconds.
 
-Filter builds a region → `[]byte` cache from `ReadMaps`, slices out each candidate's
-bytes in-memory, and falls back to `Peek` only for addresses outside the snapshot.
+Two details the engine handles so callers don't have to:
 
-### Pattern Search
+- **Chunking.** A region larger than `scanChunkBytes` (32 MiB) is read in
+  pieces that overlap by `width-1` bytes, so a match straddling a chunk
+  boundary is still found. Without the cap, one multi-gigabyte mapping times
+  `scanWorkers` would exhaust RAM.
+- **Alignment.** Fixed-width types are scanned on their natural alignment (as
+  Cheat Engine does); `bytes` uses stride 1. The stride offset is computed from
+  the *region* base, not the chunk base, so chunking cannot shift which offsets
+  a scan visits.
 
-`SearchPattern` (byte-pattern with `??` wildcard) also uses `ReadRegion` per region
-so pattern matches spanning chunk boundaries are handled without overlap bookkeeping.
+`Filter` works the other way round: it builds a region → `[]byte` cache from
+`ReadMaps`, binary-searches each candidate into its region, slices the current
+bytes out in memory, and falls back to `Peek` only for addresses whose region
+is missing (unmapped since the scan, or failed to read).
+
+### Pattern & String Search
+
+`SearchPattern` (byte pattern with `??` wildcards) runs on the same engine, and
+`SearchString` compiles a UTF-8 or UTF-16LE string into a wildcard-free pattern.
+
+Both cap results at `PatternMaxResults` and report `Truncated` rather than
+silently returning a prefix. Results carry the matched **bytes** alongside each
+address, so the API can seed the search session directly instead of re-reading
+every hit.
+
+## Testing
+
+`internal/driver/drivertest` provides an in-memory `driver.Driver`. Everything
+above the driver layer is pure logic over a byte-addressed process, so search,
+filter, pointer scanning and the HTTP handlers are all tested without an
+Android device or an `adb` binary:
+
+```go
+f := drivertest.New(drivertest.Region{Start: 0x1000, Name: "[heap]", Data: data})
+st := app.NewState(f)
+```
+
+The fake records `Peeks` / `Pokes` / `RegionReads`, so a test can assert that a
+change actually reduced transport round-trips. CI runs `go test -race`; the
+scan engine, the poller pool and `app.State` are all concurrent, which is the
+point of that flag.
 
 ## API Reference
 

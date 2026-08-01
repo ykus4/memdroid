@@ -14,8 +14,52 @@ linters:
     - govet
     - errcheck
     - staticcheck
+    # unused catches dead code left behind by refactors.
+    - unused
+    # errorlint flags == comparisons and %v on errors that should use
+    # errors.Is/As and %w — this codebase wraps errors throughout.
+    - errorlint
+    # copyloopvar flags the now-redundant `x := x` loop captures.
+    - copyloopvar
+    # bodyclose / noctx guard the HTTP client paths.
+    - bodyclose
+    # revive for general style. The "exported" doc-comment rule is left off
+    # deliberately: this codebase documents intent rather than every symbol.
+    - revive
+    # gosec: this tool shells out and serves a network API, so the
+    # security-focused checks earn their keep here.
+    - gosec
+
+  settings:
+    revive:
+      # Listing rules explicitly disables revive's noisy defaults.
+      rules:
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: early-return
+        - name: superfluous-else
+        - name: indent-error-flow
+    gosec:
+      excludes:
+        # G204: the adb driver builds device-side shell commands by design.
+        # Arguments go through exec.Command (no host shell) and payloads are
+        # base64-encoded.
+        - G204
+        # G115: a memory editor reinterprets integer widths constantly —
+        # ParseValue/FormatValue/CompareValues exist to do exactly that.
+        - G115
+        # G304: reading and writing user-named files is the feature (dumps,
+        # state files, .CT import). The network-reachable paths are confined
+        # by server.confine instead.
+        - G304
+        # G124: the UI cookie sets HttpOnly and SameSite=Strict; Secure is
+        # omitted because the server speaks plain HTTP on loopback.
+        - G124
+
   exclusions:
     rules:
       - path: _test\.go
         linters:
           - errcheck
+          - gosec
+          - bodyclose

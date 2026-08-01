@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 
 	"memdroid/internal/memory/search"
 )
@@ -11,6 +12,10 @@ import (
 const (
 	stateFilePerms = 0o600
 	stateVersion   = 1
+
+	// DefaultStateFile is the filename used when the CLI or API is asked to
+	// save/load without an explicit path.
+	DefaultStateFile = "memdroid.json"
 )
 
 type savedBookmark struct {
@@ -35,7 +40,7 @@ type saveFile struct {
 func SaveState(path string, bl *BookmarkList, s *search.Session) error {
 	sf := saveFile{Version: stateVersion}
 
-	for _, b := range bl.Entries {
+	for _, b := range bl.Entries() {
 		sf.Bookmarks = append(sf.Bookmarks, savedBookmark{
 			Addr:  uint64(b.Addr),
 			Label: b.Label,
@@ -44,13 +49,14 @@ func SaveState(path string, bl *BookmarkList, s *search.Session) error {
 	}
 
 	if s != nil && s.HasCandidates() {
+		snap := s.Snapshot()
 		sc := &savedSession{
-			PID:        s.PID,
-			ValueType:  int(s.ValueType),
-			Candidates: make(map[string][]byte),
+			PID:        s.PID(),
+			ValueType:  int(s.Type()),
+			Candidates: make(map[string][]byte, len(snap)),
 		}
-		for addr, val := range s.Snapshot() {
-			sc.Candidates[fmt.Sprintf("0x%x", addr)] = val
+		for addr, val := range snap {
+			sc.Candidates["0x"+strconv.FormatUint(uint64(addr), 16)] = val
 		}
 		sf.Session = sc
 	}
@@ -87,21 +93,24 @@ func LoadState(path string, bl *BookmarkList) (*search.Session, error) {
 			VType: search.ValueType(b.VType),
 		})
 	}
-	bl.Entries = entries
+	bl.Replace(entries)
 
 	if sf.Session == nil {
 		return nil, nil
 	}
 
-	loaded := search.NewSession(sf.Session.PID, search.ValueType(sf.Session.ValueType), nil)
+	vt := search.ValueType(sf.Session.ValueType)
 	cands := make(map[uintptr][]byte, len(sf.Session.Candidates))
 	for key, val := range sf.Session.Candidates {
-		var addr uint64
-		if _, err := fmt.Sscanf(key, "0x%x", &addr); err != nil {
+		addr, err := strconv.ParseUint(key, 0, 64)
+		if err != nil {
 			continue
 		}
 		cands[uintptr(addr)] = val
 	}
-	loaded.SetCandidates(cands)
+
+	// The driver is not serializable; the caller must rebind it via SetDriver.
+	loaded := search.NewSession(sf.Session.PID, vt, nil)
+	loaded.SetCandidatesAs(vt, cands)
 	return loaded, nil
 }

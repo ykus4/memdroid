@@ -57,9 +57,10 @@ func (f *Freezer) Freeze(drv driver.Driver, pid int, addr uintptr, value []byte)
 
 // FreezeAllCandidates freezes every address in the session with its last-seen value.
 func (f *Freezer) FreezeAllCandidates(drv driver.Driver, s *search.Session) int {
+	pid := s.PID()
 	count := 0
 	for addr, val := range s.Snapshot() {
-		if f.Freeze(drv, s.PID, addr, val) == nil {
+		if f.Freeze(drv, pid, addr, val) == nil {
 			count++
 		}
 	}

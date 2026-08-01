@@ -6,18 +6,16 @@ import (
 
 	"memdroid/internal/app"
 	"memdroid/internal/driver/adb"
-	"memdroid/internal/memory/search"
 )
 
 func doAttach(st *app.State, pid int, name string) {
-	drv := st.GetDriver()
-	if err := drv.Attach(pid); err != nil {
+	if err := st.GetDriver().Attach(pid); err != nil {
 		fmt.Printf("Attach failed: %v\n", err)
 		return
 	}
 	st.SetPID(pid)
 	st.AddAttached(pid, name)
-	st.SetSession(search.NewSession(pid, st.GetValueType(), drv))
+	st.NewSession(pid)
 	if name != "" {
 		fmt.Printf("Attached to %s (PID %d)\n", name, pid)
 	} else {
@@ -61,25 +59,13 @@ func AttachByName(st *app.State, d *adb.ADB) {
 }
 
 func Detach(st *app.State) {
-	pid := st.GetPID()
-	if !RequireAttached(pid) {
+	if !RequireAttached(st.GetPID()) {
 		return
 	}
-	st.Freezer.UnfreezeAll()
-	st.Watcher.UnwatchAll()
-	st.AlertWatcher.RemoveAll()
-	st.GetDriver().Detach(pid)
-	st.RemoveAttached(pid)
-	fmt.Printf("Detached from PID %d\n", pid)
-	remaining := st.ListAttached()
-	if len(remaining) > 0 {
-		next := remaining[0]
-		st.SetPID(next.PID)
-		st.SetSession(search.NewSession(next.PID, st.GetValueType(), st.GetDriver()))
+	detached, next := st.Detach()
+	fmt.Printf("Detached from PID %d\n", detached)
+	if next.PID != 0 {
 		fmt.Printf("Switched to PID %d (%s)\n", next.PID, next.Name)
-	} else {
-		st.SetPID(0)
-		st.SetSession(nil)
 	}
 }
 
@@ -92,15 +78,7 @@ func SwitchProcess(st *app.State) {
 	current := st.GetPID()
 	fmt.Println("Attached processes:")
 	for i, p := range procs {
-		marker := "  "
-		if p.PID == current {
-			marker = "* "
-		}
-		name := p.Name
-		if name == "" {
-			name = "(unknown)"
-		}
-		fmt.Printf("  %s%d. [%d] %s\n", marker, i+1, p.PID, name)
+		fmt.Printf("  %s%d. [%d] %s\n", activeMarker(p.PID, current), i+1, p.PID, processName(p.Name))
 	}
 	idx, err := strconv.Atoi(Prompt("Switch to: "))
 	if err != nil || idx < 1 || idx > len(procs) {
@@ -109,8 +87,8 @@ func SwitchProcess(st *app.State) {
 	}
 	target := procs[idx-1]
 	st.SetPID(target.PID)
-	st.SetSession(search.NewSession(target.PID, st.GetValueType(), st.GetDriver()))
-	fmt.Printf("Active process: PID %d (%s)\n", target.PID, target.Name)
+	st.NewSession(target.PID)
+	fmt.Printf("Active process: PID %d (%s)\n", target.PID, processName(target.Name))
 }
 
 func ListAttached(st *app.State) {
@@ -121,14 +99,23 @@ func ListAttached(st *app.State) {
 	}
 	current := st.GetPID()
 	for _, p := range procs {
-		marker := "  "
-		if p.PID == current {
-			marker = "* "
-		}
-		name := p.Name
-		if name == "" {
-			name = "(unknown)"
-		}
-		fmt.Printf("  %s[%d] %s\n", marker, p.PID, name)
+		fmt.Printf("  %s[%d] %s\n", activeMarker(p.PID, current), p.PID, processName(p.Name))
 	}
+}
+
+// activeMarker flags the currently active process in a listing.
+func activeMarker(pid, active int) string {
+	if pid == active {
+		return "* "
+	}
+	return "  "
+}
+
+// processName renders an unknown process name as a placeholder. A PID attached
+// by number has no name recorded.
+func processName(name string) string {
+	if name == "" {
+		return "(unknown)"
+	}
+	return name
 }

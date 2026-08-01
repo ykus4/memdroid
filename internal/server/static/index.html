@@ -601,12 +601,22 @@ refreshStatus();
     const ts = new Date().toLocaleTimeString('en', {hour12:false});
     const line = document.createElement('div');
     line.className = 'watch-event';
-    line.innerHTML =
-      `<span class="wts">${ts}</span>` +
-      `<span class="waddr">${escHtml(ev.addr)}</span>` +
-      `<span class="wprev">${escHtml(ev.prev)}</span>` +
-      `<span class="warrow">→</span>` +
-      `<span class="wcur">${escHtml(ev.cur)}</span>`;
+    if (ev.kind === 'alert') {
+      // Alerts report a condition rather than a previous value.
+      line.innerHTML =
+        `<span class="wts">${ts}</span>` +
+        `<span class="waddr">${escHtml(ev.addr)}</span>` +
+        `<span class="wprev">⚠ ${escHtml(ev.condition)}</span>` +
+        `<span class="warrow">${ev.triggered ? '✎' : '→'}</span>` +
+        `<span class="wcur">${escHtml(ev.cur)}</span>`;
+    } else {
+      line.innerHTML =
+        `<span class="wts">${ts}</span>` +
+        `<span class="waddr">${escHtml(ev.addr)}</span>` +
+        `<span class="wprev">${escHtml(ev.prev)}</span>` +
+        `<span class="warrow">→</span>` +
+        `<span class="wcur">${escHtml(ev.cur)}</span>`;
+    }
     wl.prepend(line);
     while (wl.children.length > 200) wl.lastChild.remove();
   };
